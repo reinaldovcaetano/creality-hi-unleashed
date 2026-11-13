@@ -29,7 +29,7 @@ services:
       - ./saida:/saida
       - pack-work:/work
     environment:
-      VERSAO: ${VERSAO:-1.2.0.0}
+      VERSAO: ${VERSAO:-1.2.0.1}
       ROTULO: ${ROTULO:-Creality Hi Unleashed alpha}
       P2: "1"
       TENTATIVA: "1"

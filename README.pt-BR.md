@@ -21,11 +21,11 @@
 
 ## Download (alfa)
 
-Uma imagem pronta para instalar está em **[Releases → v1.2.0.0-alpha](https://github.com/reinaldovcaetano/creality-hi-unleashed/releases/tag/v1.2.0.0-alpha)**. Ela não tem chave SSH nem calibração pessoal. Leia o aviso acima antes de instalar; para usar a sua chave SSH, compile a imagem você mesmo.
+Uma imagem pronta para instalar está em **[Releases → v1.2.0.1-alpha](https://github.com/reinaldovcaetano/creality-hi-unleashed/releases/tag/v1.2.0.1-alpha)**. Ela já traz o **Hi Painel** (a tela nova) e não tem chave SSH nem calibração pessoal. Leia o aviso acima antes de instalar; para usar a sua chave SSH, compile a imagem você mesmo.
 
 ## O que você ganha
 
-| | Creality de fábrica 1.1.0.74 | Creality Hi Unleashed (alfa, OTA 1.2.1.0) |
+| | Creality de fábrica 1.1.0.74 | Creality Hi Unleashed (alfa, OTA 1.2.0.1) |
 |---|---|---|
 | Wi-Fi | AIC8800DC interno, **só 2,4 GHz** | **Wi-Fi 6 em 5 GHz** com o dongle USB MediaTek **MT7921AU** (testado: 80 MHz, 2×2, conexão a 1200 Mbit/s). O chip interno fica de reserva. |
 | Pilha sem fio | cfg80211/mac80211 embutidos no kernel 5.4 | **linux-backports 6.1.145** (cfg80211, mac80211, mt76, mt7921u) + driver AIC8800 portado para ela |
@@ -91,7 +91,7 @@ git clone https://github.com/reinaldovcaetano/creality-hi-unleashed && cd creali
 #    pacote/local/save_config.txt     -> o bloco SAVE_CONFIG da SUA impressora (restaurado depois de um reset)
 docker compose run --rm kbuild        # kernel + backports + AIC8800 -> pacote/p2/   (~10-15 min)
 docker compose run --rm painel        # Hi Painel (tela própria) -> pacote/painel/   (~1 min)
-docker compose run --rm pack          # OTA -> saida/CR4NU200360C20_ota_img_V1.2.1.0.img
+docker compose run --rm pack          # OTA -> saida/CR4NU200360C20_ota_img_V1.2.0.1.img
 ./tests/rodar-testes.sh               # testa os scripts de boot num ARM emulado (busybox da própria imagem)
 ```
 
@@ -109,7 +109,7 @@ Eles só têm as ferramentas: Debian bookworm, o compilador cruzado ARM e o squa
 
 ## Instalação
 
-1. Use um pendrive em **FAT32**, só com `CR4NU200360C20_ota_img_V1.2.1.0.img` na raiz. Não renomeie o arquivo.
+1. Use um pendrive em **FAT32**, só com `CR4NU200360C20_ota_img_V1.2.0.1.img` na raiz. Não renomeie o arquivo.
 2. Com a impressora parada, coloque o pendrive e confirme a atualização na tela.
 3. **Espere uns 7 minutos.** Ela reinicia uma vez no sistema novo, faz o teste de boot e então:
    - **se passar:** a metade nova vira a oficial (`logs/hi-confirma.log` mostra `CONFIRMADO`);
@@ -117,6 +117,8 @@ Eles só têm as ferramentas: Debian bookworm, o compilador cruzado ARM e o squa
 4. Para usar 5 GHz, plugue o dongle MT7921AU e reinicie.
    - O dongle vira `wlan0` com o **mesmo MAC do Wi-Fi interno**, então o IP não muda.
    - Sem o dongle, a impressora usa o Wi-Fi interno como antes.
+5. **Tire o pendrive depois do reinício.** Enquanto houver um arquivo de atualização no pendrive, o Hi Painel deixa a tela com o instalador da Creality; quando o pendrive sai, ele assume sozinho.
+6. Reinstalar ou voltar versão também funciona: o instalador por pendrive da Creality aceita um número de versão menor (testado: 1.2.0.1 sobre 1.2.1.1).
 
 Depois de instalar:
 - **Fluidd:** `http://<ip-da-impressora>:4408`, com a câmera.

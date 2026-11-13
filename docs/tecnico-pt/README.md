@@ -10,3 +10,4 @@ O passo a passo atualizado para compilar está no README principal; alguns coman
 - `kernel.md`: como o código do kernel foi achado e validado, e como foi o porte do Wi-Fi.
 - `pacote-1a.md`, `pacote-1b.md`, `pacote-2.md`: a evolução dos pacotes, com os defeitos achados e corrigidos.
 - `versao-completa-1.2.0.0.md`: a versão completa (alfa).
+- `hi-painel.md`: o Hi Painel (tela própria): investigação da tela da Creality, proporção, rotação, touch, dados ao vivo, calibrações, Wi-Fi, queda de energia, modo boot e as decisões com o usuário.

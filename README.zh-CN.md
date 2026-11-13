@@ -21,11 +21,11 @@
 
 ## 下载（alpha）
 
-可直接安装的镜像位于 **[Releases → v1.2.0.0-alpha](https://github.com/reinaldovcaetano/creality-hi-unleashed/releases/tag/v1.2.0.0-alpha)**，不含 SSH 密钥和个人校准数据。安装前请先阅读上方警告；如需加入自己的 SSH 密钥，请自行编译镜像。
+可直接安装的镜像位于 **[Releases → v1.2.0.1-alpha](https://github.com/reinaldovcaetano/creality-hi-unleashed/releases/tag/v1.2.0.1-alpha)**，已包含 **Hi Painel**（新触摸界面），不含 SSH 密钥和个人校准数据。安装前请先阅读上方警告；如需加入自己的 SSH 密钥，请自行编译镜像。
 
 ## 你能得到什么
 
-| | Creality 官方 1.1.0.74 | Creality Hi Unleashed（alpha，OTA 1.2.1.0） |
+| | Creality 官方 1.1.0.74 | Creality Hi Unleashed（alpha，OTA 1.2.0.1） |
 |---|---|---|
 | Wi-Fi | 内置 AIC8800DC，**仅 2.4 GHz** | 使用联发科 **MT7921AU** USB 网卡实现 **5 GHz Wi-Fi 6**（实测：80 MHz、2×2、连接速率 1200 Mbit/s）。内置芯片保留作备用。 |
 | 无线协议栈 | cfg80211/mac80211 编译进 5.4 内核 | **linux-backports 6.1.145**（cfg80211、mac80211、mt76、mt7921u），并将 AIC8800 驱动移植到其上 |
@@ -91,7 +91,7 @@ git clone https://github.com/reinaldovcaetano/creality-hi-unleashed && cd creali
 #    pacote/local/save_config.txt     -> 你这台打印机的 SAVE_CONFIG 块（重置后自动恢复）
 docker compose run --rm kbuild        # 内核 + backports + AIC8800 -> pacote/p2/  （约 10-15 分钟）
 docker compose run --rm painel        # Hi Painel（自研界面）-> pacote/painel/  （约 1 分钟）
-docker compose run --rm pack          # 生成 OTA -> saida/CR4NU200360C20_ota_img_V1.2.1.0.img
+docker compose run --rm pack          # 生成 OTA -> saida/CR4NU200360C20_ota_img_V1.2.0.1.img
 ./tests/rodar-testes.sh               # 在模拟的 ARM 环境中（使用镜像自带的 busybox）测试启动脚本
 ```
 
@@ -109,7 +109,7 @@ docker compose pull      # ghcr.io/reinaldovcaetano/creality-hi-unleashed-{kbuil
 
 ## 安装
 
-1. 准备一个 **FAT32** 格式的 U 盘，根目录只放 `CR4NU200360C20_ota_img_V1.2.1.0.img`，不要改文件名。
+1. 准备一个 **FAT32** 格式的 U 盘，根目录只放 `CR4NU200360C20_ota_img_V1.2.0.1.img`，不要改文件名。
 2. 打印机空闲时插入 U 盘，在屏幕上确认升级。
 3. **等待约 7 分钟。**打印机会重启进入新系统一次，执行启动测试，然后：
    - **通过：**新分区成为正式分区（`logs/hi-confirma.log` 显示 `CONFIRMADO`）；
@@ -117,6 +117,8 @@ docker compose pull      # ghcr.io/reinaldovcaetano/creality-hi-unleashed-{kbuil
 4. 如需 5 GHz，插入 MT7921AU 网卡并重启。
    - 网卡会成为 `wlan0`，并使用与**内置 Wi-Fi 相同的 MAC 地址**，所以 IP 不变。
    - 不插网卡时，打印机照常使用内置 Wi-Fi。
+5. **重启后请拔下 U 盘。** U 盘里有升级文件时，Hi Painel 会把屏幕留给 Creality 的安装器；拔出后它会自动接管。
+6. 重新安装或降级同样可行：Creality 的 U 盘安装器接受更低的版本号（实测 1.2.0.1 覆盖 1.2.1.1）。
 
 安装后：
 - **Fluidd：**`http://<打印机IP>:4408`，带摄像头画面。
