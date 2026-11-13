@@ -10,7 +10,8 @@ start() {
         n=0; while ! grep -q " /mnt/UDISK " /proc/mounts && [ $n -lt 180 ]; do sleep 1; n=$((n+1)); done
         mkdir -p "$L"
         # SSH de reserva: chave do Mac e senha, com log detalhado
-        /usr/sbin/dropbear -F -E -p 2222 >>"$L/hi-ssh2222.log" 2>&1 &
+        # Ajuste 13/11: o dropbear do sistema agora já escuta na 2222; este só sobe se ele não estiver lá (reserva)
+        netstat -tln 2>/dev/null | grep -q ":2222 " || /usr/sbin/dropbear -F -E -p 2222 >>"$L/hi-ssh2222.log" 2>&1 &
         # diagnóstico 90 s depois e de novo aos 10 min
         sleep 90; /usr/bin/hi-diag.sh; sleep 510; /usr/bin/hi-diag.sh
     ) </dev/null >/dev/null 2>&1 &

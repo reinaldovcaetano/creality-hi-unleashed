@@ -6,8 +6,24 @@
 START=54
 
 start() {
+    sistema
     # em segundo plano: o UDISK é montado tarde pela Creality (não travar o boot nem gravar sob o ponto de montagem)
     ( aplicar ) </dev/null >/dev/null 2>&1 &
+}
+
+# Ajuste 13/11 (pedido do usuário): relógio pelo NTP.br, SSH só na 2222, sem web-server/webrtc da nuvem.
+# Idempotente; vale também para quem já tinha a Hi instalada (o /etc/config fica na camada gravável).
+sistema() {
+    if uci -q get system.ntp.server | grep -q "aliyun\|cn.pool"; then
+        uci -q delete system.ntp.server
+        for s in a.st1.ntp.br 0.br.pool.ntp.org 1.br.pool.ntp.org; do uci add_list system.ntp.server=$s; done
+        uci commit system; /etc/init.d/sysntpd restart >/dev/null 2>&1
+    fi
+    if [ "$(uci -q get dropbear.@dropbear[0].Port)" = "22" ]; then
+        uci set dropbear.@dropbear[0].Port=2222; uci commit dropbear   # vale no próximo boot (a 2222 já está atendida)
+    fi
+    [ -e /etc/rc.d/S97webrtc ] && /etc/init.d/webrtc disable
+    pidof webrtc >/dev/null && /etc/init.d/webrtc stop
 }
 
 aplicar() {

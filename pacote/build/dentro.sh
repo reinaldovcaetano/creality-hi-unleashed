@@ -63,6 +63,15 @@ chmod 755 $F/usr/bin/app-server
   done
 } >> $F/etc/hosts
 rm -f $F/etc/rc.d/S80adbd $F/etc/rc.d/K99adbd
+# Ajuste 13/11 (desempenho, pedido do usuário): sem app/nuvem Creality -> web-server (80/443/9998/9999) e webrtc da
+# nuvem não sobem (a câmera do Fluidd continua: auto_uvc.sh -> cam_app + webrtc_local na 8000).
+rm -f $F/etc/rc.d/S97webrtc $F/etc/rc.d/K97webrtc
+sed -i 's# \$BIN_PATH/\$WEB_SERVER##' $F/etc/init.d/app
+grep -q 'WEB_SERVER \$BIN_PATH' $F/etc/init.d/app && { echo "ERRO: web-server ainda na APP_LIST"; exit 1; }
+# relógio pelo NTP.br e SSH só na 2222 (a 22 da Creality sai)
+sed -i "/list server/d" $F/etc/config/system
+for ntps in 1.br.pool.ntp.org 0.br.pool.ntp.org a.st1.ntp.br; do sed -i "/^config timeserver ntp/a\\\tlist server '$ntps'" $F/etc/config/system; done
+sed -i "s#option Port[[:space:]]*'22'#option Port '2222'#" $F/etc/config/dropbear
 # Ajuste 13/11: a Hi de referência tem touch Goodix (gt9xxnew_ts); o tlsc6x só falhava no probe a cada boot.
 # O .ko continua em /lib/modules (para religar: echo tlsc6x > /etc/modules.d/touchscreen-tlsc6x).
 rm -f $F/etc/modules.d/touchscreen-tlsc6x
