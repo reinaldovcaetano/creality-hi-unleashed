@@ -10,11 +10,10 @@ USE_PROCD=1
 
 start_service() {
     [ -e /mnt/UDISK/hi-painel/desligado ] && return 0
-    BIN=/usr/bin/hi-painel
-    [ -x /mnt/UDISK/hi-painel/hi-painel ] && BIN=/mnt/UDISK/hi-painel/hi-painel
-    [ -x "$BIN" ] || return 0
+    [ -x /usr/bin/hi-painel ] || [ -x /mnt/UDISK/hi-painel/hi-painel ] || return 0
     procd_open_instance
-    procd_set_param command /bin/sh -c "sleep 15; exec $BIN --boot >> /tmp/hi-painel.log 2>&1"
+    # o UDISK monta tarde: espera até 60 s por ele antes de escolher (versão de teste do UDISK tem prioridade)
+    procd_set_param command /bin/sh -c 'sleep 15; n=0; while ! grep -q " /mnt/UDISK " /proc/mounts && [ $n -lt 60 ]; do sleep 1; n=$((n+1)); done; B=/usr/bin/hi-painel; [ -x /mnt/UDISK/hi-painel/hi-painel ] && B=/mnt/UDISK/hi-painel/hi-painel; exec $B --boot >> /tmp/hi-painel.log 2>&1'
     procd_set_param respawn 3600 10 5
     procd_close_instance
 }
