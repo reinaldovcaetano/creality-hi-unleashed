@@ -68,6 +68,23 @@ sensor de pressão (`prtouch_v3`) e o home preciso (`NEXT_HOMEZ_NACCU`).
 - O Hi Painel lê o formato novo e desenha o gráfico pelo CSV novo.
 - **Bug corrigido:** o nome do shaper cabia em 7 letras, então "2hump_ei" virava "2hump_e", um nome inválido no printer.cfg.
 
+### Algoritmo oficial do Klipper × Creality (mesma medição)
+
+`scripts/shaper_oficial.py` roda o `shaper_calibrate.py` oficial (que continua na Hi) sobre o CSV da Creality:
+
+| Filtro | X: vibração | X: acel. segura | Y: vibração | Y: acel. segura |
+|---|---|---|---|---|
+| mzv | 8,4% (44,8 Hz) | 5900 | 13,9% (38,0 Hz) | 4300 |
+| ei | 7,9% (55,2 Hz) | 5700 | 14,0% (48,6 Hz) | 4400 |
+| 2hump_ei | 2,0% (52,8 Hz) | 3100 | 7,4% (46,4 Hz) | 2300 |
+| 3hump_ei | 0,4% (51,2 Hz) | 1800 | 5,9% (50,6 Hz) | 1700 |
+
+- **O oficial recomenda X 2hump_ei 52,8 e Y mzv 38,0.** Um filtro mais pesado só ganha se a nota for 20% melhor.
+- **A Creality escolhe X 2hump_ei 50,8 e Y 3hump_ei 52,4.**
+  - O 3hump no Y só é seguro até ~1700–1900 mm/s². A 4300, que é o limite da Hi, arredonda os cantos em ~0,3 mm.
+- **Salvo em 13/11, escolha do usuário ("peça linda e rápida"):** X 2hump_ei 52,8 Hz, Y mzv 38,0 Hz. Backup do printer.cfg: `printer.cfg.antes-shaper-*`.
+- **Atenção:** a vibração pela tela da Creality (e pelo Hi Painel, que recebe o resultado da Creality) grava sozinha o resultado da Creality. Depois de medir de novo, rode o script para comparar.
+
 ## Backup e como voltar atrás
 
 - Antes de qualquer mudança, os arquivos foram copiados para `printer_data/config/backup-antes-otimizacao-20261113-1615/`:
