@@ -187,7 +187,7 @@ lv_obj_t *tela_sobre(void)
 }
 
 /* ---------------- ventoinha da peça: velocidade máxima ---------------- */
-static int vt_pct; static lv_obj_t *vt_valor, *vt_slider, *vt_real;
+static int vt_pct, vt_salvo, vt_testou, vt_gravado; static lv_obj_t *vt_valor, *vt_slider, *vt_real;
 static void vt_mostrar(void) { char b[32]; snprintf(b, sizeof b, "%d%%", vt_pct); lv_label_set_text(vt_valor, b); lv_slider_set_value(vt_slider, vt_pct, LV_ANIM_OFF); }
 static void ev_vt_slider(lv_event_t *e) { vt_pct = (lv_slider_get_value(lv_event_get_target(e)) + 2) / 5 * 5; vt_mostrar(); }
 static void ev_vt_padrao(lv_event_t *e) { (void)e; vt_pct = 50; vt_mostrar(); hi_toast("Padrão Creality: 50% (ela dividia o valor por 2)", COR_DESTAQUE); }
@@ -195,16 +195,25 @@ static void vt_aplicar_vivo(void) { hi_gcode("SET_GCODE_VARIABLE MACRO=PRINTER_P
 static void ev_vt_testar(lv_event_t *e)
 {
     (void)e; if (hi_ocupada(&hi_e)) { hi_toast("Indisponível durante a impressão", COR_AVISO); return; }
-    vt_aplicar_vivo(); hi_gcode("M106 S255"); hi_toast("Ventoinha no máximo escolhido (100% pedido)", COR_DESTAQUE);
+    vt_aplicar_vivo(); vt_testou = 1; hi_gcode("M106 S255"); hi_toast("Ventoinha no máximo escolhido (100% pedido)", COR_DESTAQUE);
 }
-static void ev_vt_parar(lv_event_t *e) { (void)e; if (!hi_ocupada(&hi_e)) hi_gcode("M107"); }
+static void ev_vt_parar(lv_event_t *e) { (void)e; if (!hi_ocupada(&hi_e)) hi_gcode("M107"); vt_testou = 0; hi_gcode("SET_GCODE_VARIABLE MACRO=PRINTER_PARAM VARIABLE=fan0_max_pct VALUE=%d", vt_salvo); }
 static void ev_vt_salvar(lv_event_t *e)
 {
     (void)e; char erro[160];
     if (!hi_cfg_ventoinha_max_gravar(vt_pct, erro, sizeof erro)) { hi_toast(erro, COR_ERRO); return; }
-    vt_aplicar_vivo();
+    vt_aplicar_vivo(); vt_gravado = 1;
+    if (vt_testou && !hi_ocupada(&hi_e)) hi_gcode("M107");
     char r[48]; snprintf(r, sizeof r, "velocidade máxima %d%%", vt_pct); hi_calib_registrar("Ventoinha da peça", r);
     hi_toast("Salvo. Já vale para as próximas ordens de ventoinha.", COR_OK); hi_voltar();
+}
+/* ao sair da tela (Voltar) sem salvar: desliga a ventoinha do teste e desfaz o máximo de teste */
+static void vt_ao_sair(lv_event_t *e)
+{
+    (void)e;
+    if (vt_gravado) return;
+    if (vt_testou && !hi_ocupada(&hi_e)) hi_gcode("M107");
+    if (vt_testou) hi_gcode("SET_GCODE_VARIABLE MACRO=PRINTER_PARAM VARIABLE=fan0_max_pct VALUE=%d", vt_salvo);
 }
 static void vt_atualizar(const hi_estado_t *e) { char b[48]; snprintf(b, sizeof b, "agora: %.0f%% real", e->ventoinha * 100); lv_label_set_text(vt_real, b); }
 lv_obj_t *tela_ventoinha(void)
@@ -212,6 +221,8 @@ lv_obj_t *tela_ventoinha(void)
     lv_obj_t *t = hi_tela_nova();
     hi_cabecalho(t, "Ventoinha da peça", true);
     vt_pct = hi_cfg_ventoinha_max(); if (vt_pct <= 0) vt_pct = 50;
+    vt_salvo = vt_pct; vt_testou = 0; vt_gravado = 0;
+    lv_obj_add_event_cb(t, vt_ao_sair, LV_EVENT_DELETE, NULL);
     lv_obj_t *c = hi_cartao(t, 8, 38, 304, 96);
     lv_obj_t *n = hi_rotulo(c, "Velocidade máxima real (100% no fatiador)", &hi_font_12, COR_TEXTO2); lv_obj_set_pos(n, 10, 6);
     vt_valor = hi_rotulo(c, "", &hi_font_28, COR_MESA); lv_obj_set_pos(vt_valor, 10, 24);
