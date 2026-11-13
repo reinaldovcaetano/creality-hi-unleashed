@@ -91,6 +91,16 @@ docker compose run --rm pack          # 生成 OTA -> saida/CR4NU200360C20_ota_i
 
 内核编译过程会输出引脚核对结果（`328 ok, 0 com erro`），并检查每个模块的 `vermagic`。它还会用 **Creality 原版设备树**生成启动镜像。
 
+### 预构建的编译容器
+
+编译容器已发布到 GitHub Packages，无需在本地构建：
+
+```bash
+docker compose pull      # ghcr.io/reinaldovcaetano/creality-hi-unleashed-{kbuild,pack}:alpha
+```
+
+容器里只有工具：Debian bookworm、ARM 交叉编译器和 squashfs-tools，不包含任何 Creality 文件。
+
 ## 安装
 
 1. 准备一个 **FAT32** 格式的 U 盘，根目录只放 `CR4NU200360C20_ota_img_V1.2.0.0.img`，不要改文件名。

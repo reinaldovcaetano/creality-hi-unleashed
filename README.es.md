@@ -91,6 +91,16 @@ docker compose run --rm pack          # OTA -> saida/CR4NU200360C20_ota_img_V1.2
 
 El build del kernel muestra la verificación de pines (`328 ok, 0 com erro`) y comprueba el `vermagic` de cada módulo. También arma la imagen de arranque con el **device tree original de Creality**.
 
+### Contenedores de build listos
+
+Los contenedores de build están publicados en GitHub Packages, así que no hace falta construirlos localmente:
+
+```bash
+docker compose pull      # ghcr.io/reinaldovcaetano/creality-hi-unleashed-{kbuild,pack}:alpha
+```
+
+Solo contienen las herramientas: Debian bookworm, el compilador cruzado ARM y squashfs-tools. No incluyen ningún archivo de Creality.
+
 ## Instalación
 
 1. Use un pendrive en **FAT32**, solo con `CR4NU200360C20_ota_img_V1.2.0.0.img` en la raíz. No cambie el nombre del archivo.
