@@ -23,6 +23,8 @@ void hi_teclado_texto(const char *titulo, const char *inicial, hi_txt_cb cb, voi
 /* tela "Reiniciando o Klipper..." que só sai quando o Klipper volta a ficar pronto (chamar depois de enviar
  * FIRMWARE_RESTART / SAVE_CONFIG). 'depois' é a mensagem mostrada quando terminar (pode ser NULL). */
 void hi_reiniciando(const char *motivo, const char *depois);
+/* opcional: chamada uma vez quando o Klipper voltar pronto (em vez do aviso). Definir logo depois de hi_reiniciando. */
+extern hi_ok_cb hi_reiniciando_depois; extern void *hi_reiniciando_depois_ud;
 void hi_set_atualizar(hi_atualizar_fn f);
 void hi_atualizar_agora(void);          /* chamado pelo timer principal */
 extern hi_estado_t hi_e;                /* último estado copiado */

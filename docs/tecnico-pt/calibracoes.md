@@ -83,7 +83,30 @@ sensor de pressão (`prtouch_v3`) e o home preciso (`NEXT_HOMEZ_NACCU`).
 - **A Creality escolhe X 2hump_ei 50,8 e Y 3hump_ei 52,4.**
   - O 3hump no Y só é seguro até ~1700–1900 mm/s². A 4300, que é o limite da Hi, arredonda os cantos em ~0,3 mm.
 - **Salvo em 13/11, escolha do usuário ("peça linda e rápida"):** X 2hump_ei 52,8 Hz, Y mzv 38,0 Hz. Backup do printer.cfg: `printer.cfg.antes-shaper-*`.
-- **Atenção:** a vibração pela tela da Creality (e pelo Hi Painel, que recebe o resultado da Creality) grava sozinha o resultado da Creality. Depois de medir de novo, rode o script para comparar.
+- **Atenção:** a vibração pela tela da Creality grava sozinha o resultado dela. Pelo Hi Painel isso não acontece mais (ver abaixo).
+
+### Hi Painel: três perfis com o cálculo oficial
+
+- Depois de medir, o painel roda `/usr/share/hi/shaper_oficial.py` na própria Hi (com `nice`, ~50 s por eixo, numpy 1.20 da Hi) sobre o CSV da medição.
+  - A tela mostra "Calculando (Klipper oficial)".
+  - Se o cálculo falhar, fica o resultado da Creality.
+- Perfis, escolhidos por eixo sobre a tabela do Klipper oficial:
+  - **Alta:** o filtro de menor vibração. Paredes mais lisas; acelere menos.
+  - **Média** (padrão): o recomendado pelo Klipper oficial.
+  - **Rápida:** entre mzv e ei, o de menor nota do Klipper. Cantos vivos e mais aceleração.
+- A tela mostra a aceleração segura do perfil (o menor valor entre os dois eixos).
+  - Tocar no cartão do eixo troca o filtro daquele eixo à mão.
+  - "Aplicar e salvar" grava no printer.cfg e reinicia o Klipper.
+- O perfil escolhido fica guardado (`vib_perfil`).
+  - O **Calibrar tudo** usa esse perfil: calcula enquanto os PIDs rodam e, depois do "Salvar tudo", troca a escolha da Creality pelo perfil e reinicia mais uma vez.
+  - Os CSVs somem quando o Klipper reinicia, por isso o cálculo é feito antes.
+- Números de 13/11:
+
+| Perfil | X | Y | Aceleração segura |
+|---|---|---|---|
+| Alta | 3hump_ei 51,2 (0,4%) | 3hump_ei 50,6 (5,9%) | 1700 |
+| Média | 2hump_ei 52,8 (2,0%) | mzv 38,0 (13,9%) | 3100 |
+| Rápida | ei 55,2 (7,9%) | ei 48,6 (14,0%) | 4400 |
 
 ## Backup e como voltar atrás
 

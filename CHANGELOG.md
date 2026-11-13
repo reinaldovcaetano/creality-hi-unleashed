@@ -8,7 +8,7 @@ Já aplicado na impressora de teste e no pacote. Vai na próxima imagem.
 - `[z_tilt] retry_tolerance` 0,1 → 0,03; `[bed_mesh] probe_count` 9×9 → 7×7; limpeza do bico 10 → 6 passadas (`scripts/otimiza_calib.py`).
 - `G29 BED=<temp>`: malha medida na temperatura de uso. Sem `BED`, fica igual ao original (`scripts/macro_g29_temp.py`).
 - `START_PRINT` com `variable_skip_mesh`: permite imprimir com a malha salva.
-- Vibração: o Hi Painel entende o formato da base 1.1.0.74 (só o melhor shaper + CSV novo), e o nome "2hump_ei" não é mais cortado. A preferência por mzv foi tentada e retirada, porque medido na Hi ele vibra 4 a 6 vezes mais.
+- Vibração: depois de medir, o Hi Painel recalcula com o **algoritmo oficial do Klipper** na própria Hi e oferece 3 perfis, **Alta / Média / Rápida**, com a aceleração segura de cada um. O Calibrar tudo usa o perfil escolhido. O painel entende o formato da base 1.1.0.74 (só o melhor shaper + CSV novo), e o nome "2hump_ei" não é mais cortado. A preferência por mzv foi tentada e retirada, porque medido na Hi ele vibra 4 a 6 vezes mais.
 - Nada de localização foi alterado (G28, z_align, z_offset, prtouch, NEXT_HOMEZ_NACCU).
 
 ### Ventoinha da peça

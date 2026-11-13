@@ -7,6 +7,8 @@
 #include <math.h>
 #include <glob.h>
 #include <sys/stat.h>
+#include <pthread.h>
+#include <time.h>
 #include "tema.h"
 #include "comum.h"
 #include "telas.h"
@@ -237,9 +239,45 @@ lv_obj_t *tela_pid(void)
 }
 
 /* ================= vibração (input shaper) ================= */
-typedef struct { char nome[16]; double hz, vib, suav, acel; } shp_t;
+typedef struct { char nome[16]; double hz, vib, suav, acel, nota; } shp_t;
 static shp_t shp[2][8]; static int n_shp[2], rec_shp[2], esc_shp[2];
-static int sh_fase, sh_eixos, sh_eixo_vista;   /* eixos: 1=X 2=Y 3=ambos */
+static int sh_fase, sh_eixos, sh_eixo_vista;   /* eixos: 1=X 2=Y 3=ambos; fase 3 = calculando pelo Klipper oficial */
+/* Ajuste 13/11: 3 perfis prontos sobre a tabela do Klipper oficial: 0 Alta (menos vibração), 1 Média (recomendado
+ * pelo Klipper), 2 Rápida (mzv/ei de menor nota: cantos vivos, aceita mais aceleração) */
+static int sh_pre[2][3], sh_perfil = 1, sh_tem_perfis;
+static const char *SH_PERFIL_NOME[3] = {"Alta", "Média", "Rápida"};
+static const char *SH_PERFIL_DESC[3] = {"paredes mais lisas", "equilíbrio (Klipper)", "cantos vivos"};
+/* cálculo oficial em segundo plano (python3 /usr/share/hi/shaper_oficial.py, ~50 s por eixo na Hi) */
+static char sh_calc[2][4096]; static volatile int sh_calc_fim, sh_calc_rodando; static int sh_calc_eixos; static long sh_t0;
+static void *sh_calc_thread(void *u)
+{
+    (void)u;
+    for (int ax = 0; ax < 2; ax++) {
+        sh_calc[ax][0] = 0;
+        if (!(sh_calc_eixos & (ax + 1))) continue;
+        char cmd[160]; snprintf(cmd, sizeof cmd, "nice -n 10 python3 /usr/share/hi/shaper_oficial.py %c %ld 2>/dev/null", ax ? 'y' : 'x', sh_t0);
+        FILE *f = popen(cmd, "r"); if (!f) continue;
+        size_t n = fread(sh_calc[ax], 1, sizeof sh_calc[ax] - 1, f); sh_calc[ax][n] = 0; pclose(f);
+    }
+    sh_calc_fim = 1; sh_calc_rodando = 0;
+    return NULL;
+}
+static void sh_perfis(void)
+{
+    sh_tem_perfis = 1;
+    for (int ax = 0; ax < 2; ax++) {
+        if (!n_shp[ax]) continue;
+        if (n_shp[ax] < 3) sh_tem_perfis = 0;
+        int alta = rec_shp[ax], rap = -1;
+        for (int i = 0; i < n_shp[ax]; i++) {
+            if (shp[ax][i].vib < shp[ax][alta].vib) alta = i;
+            if ((!strcmp(shp[ax][i].nome, "mzv") || !strcmp(shp[ax][i].nome, "ei")) &&
+                (rap < 0 || shp[ax][i].nota < shp[ax][rap].nota)) rap = i;      /* nota do Klipper (vibração x suavização) */
+        }
+        sh_pre[ax][0] = alta; sh_pre[ax][1] = rec_shp[ax]; sh_pre[ax][2] = rap < 0 ? rec_shp[ax] : rap;
+        esc_shp[ax] = sh_pre[ax][sh_perfil];
+    }
+}
 static lv_obj_t *sh_area, *l_sh_info;
 
 static void sh_desenhar(void);
@@ -252,6 +290,8 @@ static void parse_shaper(const char *txt, int ax)
         if (sscanf(p, "Fitted shaper '%15[^']' frequency = %lf Hz (vibrations = %lf%%, smoothing ~= %lf)", s.nome, &s.hz, &s.vib, &s.suav) >= 2 && n_shp[ax] < 8) {
             const char *q = strstr(p, "max_accel <= ");
             if (q && q - p < 300) s.acel = atof(q + 13);
+            const char *sc = strstr(p, "score = "), *fl = strchr(p, '\n');
+            if (sc && (!fl || sc < fl)) s.nota = atof(sc + 8);
             shp[ax][n_shp[ax]++] = s;
         }
         p++;
@@ -278,7 +318,7 @@ static void parse_shaper(const char *txt, int ax)
 }
 static void sh_iniciar(void *u)
 {
-    (void)u; job_iniciar(); sh_fase = 1;
+    (void)u; job_iniciar(); sh_fase = 1; sh_t0 = (long)time(NULL) - 5;
     if (sh_eixos == 3) hi_gcode("G28\nSHAPER_CALIBRATE");
     else hi_gcode("G28\nSHAPER_CALIBRATE AXIS=%s", sh_eixos == 1 ? "X" : "Y");
     sh_desenhar();
@@ -290,10 +330,22 @@ static void ev_sh_iniciar(lv_event_t *e)
     hi_confirmar("Medir vibração?", "Faz Home e vibra o cabeçote (barulho alto por ~1 min por eixo). Deixe a mesa livre.", LV_SYMBOL_PLAY "  Iniciar", COR_DESTAQUE, sh_iniciar, NULL);
 }
 static void ev_sh_vista(lv_event_t *e) { sh_eixo_vista = (int)(intptr_t)lv_event_get_user_data(e); sh_desenhar(); }
-static void ev_sh_escolher(lv_event_t *e) { esc_shp[sh_eixo_vista] = (int)(intptr_t)lv_event_get_user_data(e); sh_desenhar(); }
-static void sh_aplicar(void *u)
+static void ev_sh_escolher(lv_event_t *e) { esc_shp[sh_eixo_vista] = (int)(intptr_t)lv_event_get_user_data(e); sh_perfil = -1; sh_desenhar(); }
+static void ev_sh_perfil(lv_event_t *e)
 {
-    (void)u;
+    sh_perfil = (int)(intptr_t)lv_event_get_user_data(e);
+    for (int ax = 0; ax < 2; ax++) if (n_shp[ax]) esc_shp[ax] = sh_pre[ax][sh_perfil];
+    sh_desenhar();
+}
+/* toque no cartão do eixo: troca o filtro daquele eixo à mão (próximo da lista) */
+static void ev_sh_cartao(lv_event_t *e)
+{
+    (void)e; int ax = sh_eixo_vista; if (n_shp[ax] < 2) return;
+    esc_shp[ax] = (esc_shp[ax] + 1) % n_shp[ax]; sh_perfil = -1; sh_desenhar();
+}
+/* grava os filtros escolhidos (esc_shp) no bloco SAVE_CONFIG; devolve 1 se gravou (resumo em r) */
+static int sh_gravar(char *r, int tam, char *erro, int etam)
+{
     const char *k[4]; const char *v[4]; char vb[4][24]; int n = 0;
     for (int ax = 0; ax < 2; ax++) {
         if (!n_shp[ax]) continue;
@@ -301,13 +353,31 @@ static void sh_aplicar(void *u)
         k[n] = ax ? "shaper_type_y" : "shaper_type_x"; snprintf(vb[n], 24, "%s", s->nome); v[n] = vb[n]; n++;
         k[n] = ax ? "shaper_freq_y" : "shaper_freq_x"; snprintf(vb[n], 24, "%.1f", s->hz); v[n] = vb[n]; n++;
     }
-    char erro[160];
-    if (n && hi_cfg_autosave("input_shaper", k, v, n, erro, sizeof erro)) {
-        char r[96] = "";
-        for (int ax = 0; ax < 2; ax++) if (n_shp[ax]) { char x[48]; snprintf(x, sizeof x, "%s %s %.1f Hz  ", ax ? "Y" : "X", shp[ax][esc_shp[ax]].nome, shp[ax][esc_shp[ax]].hz); strcat(r, x); }
-        hi_calib_registrar("Vibração", hi_br(r));
+    if (!n) { snprintf(erro, etam, "Nada para aplicar"); return 0; }
+    if (!hi_cfg_autosave("input_shaper", k, v, n, erro, etam)) return 0;
+    r[0] = 0;
+    for (int ax = 0; ax < 2; ax++) if (n_shp[ax]) {
+        char x[48]; snprintf(x, sizeof x, "%s %s %.1f Hz  ", ax ? "Y" : "X", shp[ax][esc_shp[ax]].nome, shp[ax][esc_shp[ax]].hz);
+        if ((int)(strlen(r) + strlen(x)) < tam) strcat(r, x);
+    }
+    if (sh_perfil >= 0) { char x[24]; snprintf(x, sizeof x, "(%s)", SH_PERFIL_NOME[sh_perfil]); if ((int)(strlen(r) + strlen(x)) < tam) strcat(r, x); hi_pref_set("vib_perfil", sh_perfil); }
+    hi_calib_registrar("Vibração", hi_br(r));
+    for (int ax = 0; ax < 2; ax++) if (n_shp[ax] && shp[ax][esc_shp[ax]].acel > 0) hi_pref_set(ax ? "acel_rec_y" : "acel_rec_x", (int)shp[ax][esc_shp[ax]].acel);
+    return 1;
+}
+static void sh_aplicar(void *u)
+{
+    (void)u; char r[128], erro[160];
+    if (sh_gravar(r, sizeof r, erro, sizeof erro)) {
         hi_gcode("FIRMWARE_RESTART"); hi_voltar(); hi_reiniciando("shaper gravado no printer.cfg", LV_SYMBOL_OK "  Shaper salvo. Klipper pronto.");
-    } else hi_toast(n ? erro : "Nada para aplicar", COR_ERRO);
+    } else hi_toast(erro, COR_ERRO);
+}
+/* dispara o cálculo oficial em segundo plano (eixos: 1=X 2=Y 3=ambos) */
+static void sh_calc_disparar(int eixos)
+{
+    if (sh_calc_rodando) return;
+    sh_calc_eixos = eixos; sh_calc_fim = 0; sh_calc_rodando = 1;
+    pthread_t t; if (pthread_create(&t, NULL, sh_calc_thread, NULL) == 0) pthread_detach(t); else { sh_calc_rodando = 0; sh_calc_fim = 1; }
 }
 static void ev_sh_aplicar(lv_event_t *e) { (void)e; hi_confirmar("Aplicar e salvar?", "Grava o shaper escolhido de cada eixo (com backup do printer.cfg) e reinicia o Klipper.", LV_SYMBOL_SAVE "  Salvar", COR_OK, sh_aplicar, NULL); }
 
@@ -370,10 +440,15 @@ static void sh_desenhar(void)
         lv_obj_t *a = hi_rotulo(sh_area, b, &hi_font_12, COR_TEXTO); lv_obj_set_pos(a, 10, 116);
         lv_obj_t *go = hi_botao(sh_area, LV_SYMBOL_PLAY "  Medir", COR_DESTAQUE, 304, 44); lv_obj_set_pos(go, 8, 156);
         lv_obj_add_event_cb(go, ev_sh_iniciar, LV_EVENT_CLICKED, NULL);
-    } else if (sh_fase == 1) {
+    } else if (sh_fase == 1 || sh_fase == 3) {
         lv_obj_t *sp = lv_spinner_create(sh_area, 1200, 60); lv_obj_set_size(sp, 60, 60); lv_obj_align(sp, LV_ALIGN_TOP_MID, 0, 10);
         lv_obj_set_style_arc_color(sp, COR_DESTAQUE, LV_PART_INDICATOR);
-        l_sh_info = hi_rotulo(sh_area, "Medindo...", &hi_font_14, COR_TEXTO); lv_obj_align(l_sh_info, LV_ALIGN_TOP_MID, 0, 80);
+        l_sh_info = hi_rotulo(sh_area, sh_fase == 3 ? "Calculando..." : "Medindo...", &hi_font_14, COR_TEXTO); lv_obj_align(l_sh_info, LV_ALIGN_TOP_MID, 0, 80);
+        if (sh_fase == 3) {
+            lv_obj_t *d = hi_rotulo(sh_area, "Medição pronta. Calculando os filtros pelo\nalgoritmo oficial do Klipper (~1 min por eixo).", &hi_font_12, COR_TEXTO2);
+            lv_obj_set_style_text_align(d, LV_TEXT_ALIGN_CENTER, 0); lv_obj_align(d, LV_ALIGN_TOP_MID, 0, 106);
+            return;
+        }
         lv_obj_t *x = hi_botao(sh_area, LV_SYMBOL_STOP "  Interromper", COR_ERRO, 304, 40); lv_obj_set_pos(x, 8, 156);
         lv_obj_add_event_cb(x, ev_interromper, LV_EVENT_CLICKED, NULL);
     } else {
@@ -386,13 +461,27 @@ static void sh_desenhar(void)
         }
         sh_grafico(sh_area, ax);
         lv_obj_t *c = hi_cartao(sh_area, 200, n_shp[0] && n_shp[1] ? 32 : 4, 112, n_shp[0] && n_shp[1] ? 92 : 120);
+        if (sh_tem_perfis) { lv_obj_add_flag(c, LV_OBJ_FLAG_CLICKABLE); lv_obj_set_style_bg_color(c, COR_CARTAO2, LV_STATE_PRESSED); lv_obj_add_event_cb(c, ev_sh_cartao, LV_EVENT_CLICKED, NULL); }
         if (n_shp[ax]) {
             shp_t *s = &shp[ax][esc_shp[ax]];
             snprintf(b, sizeof b, "%s %s\n%.1f Hz", ax ? "Y" : "X", s->nome, s->hz); hi_br(b);
             lv_obj_t *r = hi_rotulo(c, b, &hi_font_14, esc_shp[ax] == rec_shp[ax] ? COR_OK : COR_AVISO); lv_obj_set_pos(r, 8, 4);
-            snprintf(b, sizeof b, "acel. ideal\n%.0f mm/s\xC2\xB2\nvibra %.1f%%", s->acel, s->vib); hi_br(b);
+            snprintf(b, sizeof b, "seguro até\n%.0f mm/s\xC2\xB2\nvibra %.1f%%", s->acel, s->vib); hi_br(b);
             lv_obj_t *a = hi_rotulo(c, b, &hi_font_12, COR_TEXTO2); lv_obj_set_pos(a, 8, 40);
         } else { lv_obj_t *a = hi_rotulo(c, "sem resultado", &hi_font_12, COR_TEXTO2); lv_obj_set_pos(a, 8, 8); }
+        if (sh_tem_perfis) {          /* 3 perfis prontos: Alta / Média / Rápida */
+            for (int k = 0; k < 3; k++) {
+                lv_obj_t *bt = hi_botao(sh_area, SH_PERFIL_NOME[k], k == sh_perfil ? COR_DESTAQUE : COR_CARTAO2, 98, 30);
+                lv_obj_set_pos(bt, 8 + k * 103, 128); lv_obj_add_event_cb(bt, ev_sh_perfil, LV_EVENT_CLICKED, (void *)(intptr_t)k);
+            }
+            double lim = 1e9; for (int k = 0; k < 2; k++) if (n_shp[k] && shp[k][esc_shp[k]].acel > 0 && shp[k][esc_shp[k]].acel < lim) lim = shp[k][esc_shp[k]].acel;
+            if (sh_perfil >= 0) snprintf(b, sizeof b, "%s: %s \xE2\x80\xA2 até %.0f mm/s\xC2\xB2", SH_PERFIL_NOME[sh_perfil], SH_PERFIL_DESC[sh_perfil], lim);
+            else snprintf(b, sizeof b, "Escolha manual \xE2\x80\xA2 até %.0f mm/s\xC2\xB2", lim);
+            lv_obj_t *li = hi_rotulo(sh_area, b, &hi_font_12, COR_TEXTO2); lv_obj_set_pos(li, 10, 160);
+            lv_obj_t *ap = hi_botao(sh_area, LV_SYMBOL_SAVE "  Aplicar e salvar", COR_OK, 304, 30); lv_obj_set_pos(ap, 8, 176);
+            lv_obj_add_event_cb(ap, ev_sh_aplicar, LV_EVENT_CLICKED, NULL);
+            return;
+        }
         /* escolha entre os shapers calculados */
         lv_obj_t *lin = lv_obj_create(sh_area); lv_obj_remove_style_all(lin);
         lv_obj_set_size(lin, 304, 30); lv_obj_set_pos(lin, 8, 128); lv_obj_set_flex_flow(lin, LV_FLEX_FLOW_ROW);
@@ -408,8 +497,11 @@ static void sh_desenhar(void)
         lv_obj_add_event_cb(ap, ev_sh_aplicar, LV_EVENT_CLICKED, NULL);
     }
 }
+static double sh_calc_ini;
+static void sh_calc_atualizar(void);
 static void sh_atualizar(const hi_estado_t *e)
 {
+    if (sh_fase == 3) { sh_calc_atualizar(); return; }
     if (sh_fase != 1) return;
     double dt = hi_agora() - job.inicio; char b[96];
     snprintf(b, sizeof b, "Medindo %s...  %dmin %02ds", sh_eixos == 3 ? "X e Y" : sh_eixos == 1 ? "X" : "Y", (int)dt / 60, (int)dt % 60);
@@ -424,12 +516,27 @@ static void sh_atualizar(const hi_estado_t *e)
         if (py) parse_shaper(py, 1);
         if (!px && !py) parse_shaper(job.console, sh_eixos == 2 ? 1 : 0);
         if (n_shp[0] || n_shp[1]) {
-            sh_fase = 2; sh_eixo_vista = n_shp[0] ? 0 : 1;
-            for (int ax = 0; ax < 2; ax++) if (n_shp[ax] && shp[ax][rec_shp[ax]].acel > 0) hi_pref_set(ax ? "acel_rec_y" : "acel_rec_x", (int)shp[ax][rec_shp[ax]].acel);
+            /* a Creality só dá o melhor dela: refaz a conta com o algoritmo oficial do Klipper sobre o CSV da medição */
+            sh_calc_disparar((n_shp[0] ? 1 : 0) | (n_shp[1] ? 2 : 0));
+            sh_fase = 3; sh_calc_ini = hi_agora();
         }
         else { sh_fase = 0; char m[240]; snprintf(m, sizeof m, "Sem resultado: %s", job.erro ? job_erro_txt() : "formato desconhecido (veja o console no Fluidd)"); hi_toast(m, COR_ERRO); }
         sh_desenhar();
     }
+}
+static void sh_calc_atualizar(void)
+{
+    char b[96]; double dt = hi_agora() - sh_calc_ini;
+    snprintf(b, sizeof b, "Calculando (Klipper oficial)...  %dmin %02ds", (int)dt / 60, (int)dt % 60);
+    lv_label_set_text(l_sh_info, b);
+    if (!sh_calc_fim) return;
+    for (int ax = 0; ax < 2; ax++)
+        if (strstr(sh_calc[ax], "Fitted shaper '")) parse_shaper(sh_calc[ax], ax);   /* senão fica o resultado da Creality */
+    sh_perfil = hi_pref("vib_perfil", 1); if (sh_perfil < 0 || sh_perfil > 2) sh_perfil = 1;
+    sh_perfis();
+    sh_fase = 2; sh_eixo_vista = n_shp[0] ? 0 : 1;
+    if (!sh_tem_perfis) hi_toast("Cálculo oficial indisponível: mostrando o resultado da Creality", COR_AVISO);
+    sh_desenhar();
 }
 lv_obj_t *tela_shaper(void)
 {
@@ -693,7 +800,25 @@ lv_obj_t *tela_historico_calib(void)
 /* ================= calibrar tudo ================= */
 /* Ordem definida com o usuário (13/11/2026): home primeiro (G28), depois vibração, PID do bico, PID da mesa
  * e malha por último (a mesa já está quente do PID). O nivelamento Z separado é opcional (logo após o home). */
-static int ct_sel[5] = {0, 1, 1, 1, 1}, ct_rodando, ct_etapa, ct_mesa;   /* etapa -1 = home */
+static int ct_sel[5] = {0, 1, 1, 1, 1}, ct_rodando, ct_etapa, ct_mesa, ct_vib;   /* etapa -1 = home; ct_vib = cálculo oficial disparado */
+/* Calibrar tudo: o SHAPER_CALIBRATE deixa pendente a escolha da Creality (e o CXSAVE da malha grava junto). Depois do
+ * Salvar tudo, quando o Klipper volta, troca pelo perfil de vibração do usuário (Alta/Média/Rápida; padrão Média)
+ * calculado pelo algoritmo oficial do Klipper (rodou em segundo plano durante os PIDs) e reinicia mais uma vez. */
+static void ct_vib_aplicar(void *u)
+{
+    (void)u;
+    if (!sh_calc_fim) { hi_reiniciando_depois = NULL; lv_timer_t *t = lv_timer_create((lv_timer_cb_t)ct_vib_aplicar, 2000, NULL); lv_timer_set_repeat_count(t, 1); hi_toast("Terminando o cálculo da vibração...", COR_AVISO); return; }
+    memset(n_shp, 0, sizeof n_shp);
+    for (int ax = 0; ax < 2; ax++) if (strstr(sh_calc[ax], "Fitted shaper '")) parse_shaper(sh_calc[ax], ax);
+    sh_perfil = hi_pref("vib_perfil", 1); if (sh_perfil < 0 || sh_perfil > 2) sh_perfil = 1;
+    sh_perfis();
+    char r[128], erro[160];
+    if (!n_shp[0] || !n_shp[1] || !sh_tem_perfis) { hi_toast("Vibração: cálculo oficial indisponível, ficou a escolha da Creality", COR_AVISO); return; }
+    if (sh_gravar(r, sizeof r, erro, sizeof erro)) {
+        char d[200]; snprintf(d, sizeof d, LV_SYMBOL_OK "  Vibração: %s", r);
+        hi_gcode("FIRMWARE_RESTART"); hi_reiniciando("vibração: perfil escolhido (Klipper oficial)", d);
+    } else hi_toast(erro, COR_ERRO);
+}
 static lv_obj_t *ct_btn[5], *ct_info;
 static const char *ct_nome[5] = {"Nível Z", "Vibração", "PID do bico", "PID da mesa", "Nivel.+malha"};
 static void ev_ct_sel(lv_event_t *e)
@@ -706,8 +831,11 @@ static void ct_proxima(void)
     while (ct_etapa >= 0 && ct_etapa < 5 && !ct_sel[ct_etapa]) ct_etapa++;
     if (ct_etapa >= 5) {
         ct_rodando = 0; hi_gcode("TURN_OFF_HEATERS\nM107");
-        lv_label_set_text(ct_info, ct_sel[4] ? "Pronto. A malha já está ativa e gravada.\nToque em Salvar tudo para reiniciar e usar PID/vibração."
-                                             : "Tudo pronto. Toque em Salvar tudo para gravar\n(SAVE_CONFIG) e reiniciar o Klipper.");
+        static char fim[200]; int pf = hi_pref("vib_perfil", 1); if (pf < 0 || pf > 2) pf = 1;
+        snprintf(fim, sizeof fim, "%s%s%s", ct_sel[4] ? "Pronto. A malha já está ativa e gravada.\nToque em Salvar tudo para reiniciar e usar PID/vibração."
+                                                       : "Tudo pronto. Toque em Salvar tudo para gravar\n(SAVE_CONFIG) e reiniciar o Klipper.",
+                 ct_vib ? "\nVibração: perfil " : "", ct_vib ? SH_PERFIL_NOME[pf] : "");
+        lv_label_set_text(ct_info, fim);
         if (ct_sel[4]) hi_pref_set("malha_temp", ct_mesa);
         hi_calib_registrar("Calibrar tudo", "concluído"); return;
     }
@@ -717,7 +845,7 @@ static void ct_proxima(void)
     switch (ct_etapa) {
         case -1: hi_gcode("G28"); break;
         case 0: hi_gcode("Z_TILT_ADJUST"); break;
-        case 1: hi_gcode("SHAPER_CALIBRATE"); break;
+        case 1: sh_t0 = (long)time(NULL) - 5; ct_vib = 0; hi_gcode("SHAPER_CALIBRATE"); break;
         case 2: hi_gcode("M106 S255\nPID_CALIBRATE HEATER=extruder TARGET=%d\nM107", tb); break;
         case 3: hi_gcode("PID_CALIBRATE HEATER=heater_bed TARGET=%d", tm); break;
         case 4: hi_gcode("G29 BED=%d", tm); break;   /* malha na mesa do filamento ativo */   /* limpa bico, Z, malha e grava (igual à tela original) */
@@ -725,7 +853,12 @@ static void ct_proxima(void)
 }
 static void ct_iniciar(void *u) { (void)u; ct_rodando = 1; ct_etapa = -1; ct_proxima(); }
 static void ev_ct_iniciar(lv_event_t *e) { (void)e; if (!pode_calibrar()) return; if (ct_sel[4] && !sem_filamento_ou_avisar()) return; hi_confirmar("Calibrar tudo?", "Home, depois as calibrações marcadas em sequência (20 a 40 min). Mesa livre. No fim você decide se salva.", LV_SYMBOL_PLAY "  Iniciar", COR_DESTAQUE, ct_iniciar, NULL); }
-static void ev_ct_salvar(lv_event_t *e) { (void)e; if (ct_rodando) { hi_toast("Aguarde terminar", COR_AVISO); return; } hi_confirmar("Salvar tudo?", "Grava todos os resultados (SAVE_CONFIG) e reinicia o Klipper.", LV_SYMBOL_SAVE "  Salvar", COR_OK, salvar_config, "Calibrar tudo"); }
+static void ct_salvar(void *u)
+{
+    salvar_config(u);
+    if (ct_vib) { ct_vib = 0; hi_reiniciando_depois = ct_vib_aplicar; hi_reiniciando_depois_ud = NULL; }
+}
+static void ev_ct_salvar(lv_event_t *e) { (void)e; if (ct_rodando) { hi_toast("Aguarde terminar", COR_AVISO); return; } hi_confirmar("Salvar tudo?", "Grava todos os resultados (SAVE_CONFIG) e reinicia o Klipper.", LV_SYMBOL_SAVE "  Salvar", COR_OK, ct_salvar, "Calibrar tudo"); }
 static void ct_atualizar(const hi_estado_t *e)
 {
     if (!ct_rodando) return;
@@ -736,6 +869,7 @@ static void ct_atualizar(const hi_estado_t *e)
     if (job_passo(e)) {
         job.ativo = 0;
         if (job.erro) { ct_rodando = 0; snprintf(b, sizeof b, "Parou em %s:\n%s", ct_etapa < 0 ? "Home" : ct_nome[ct_etapa], job_erro_txt()); lv_label_set_text(ct_info, b); hi_gcode("TURN_OFF_HEATERS"); return; }
+        if (ct_etapa == 1) { sh_calc_disparar(3); ct_vib = 1; }    /* calcula enquanto os PIDs rodam */
         ct_etapa++; ct_proxima();
     }
 }
@@ -762,3 +896,30 @@ lv_obj_t *tela_calibrar_tudo(void)
     hi_set_atualizar(ct_atualizar);
     return t;
 }
+
+/* demo do mock: resultado com os 3 perfis, números reais da Hi em 13/11 (algoritmo oficial do Klipper) */
+static const char *SH_DEMO[2] = {
+"Fitted shaper 'zv' frequency = 59.4 Hz (vibrations = 28.5%, smoothing ~= 0.050, score = 0.011010)\nTo avoid too much smoothing with 'zv', suggested max_accel <= 13800 mm/sec^2\n"
+"Fitted shaper 'mzv' frequency = 44.8 Hz (vibrations = 8.4%, smoothing ~= 0.101, score = 0.005181)\nTo avoid too much smoothing with 'mzv', suggested max_accel <= 5900 mm/sec^2\n"
+"Fitted shaper 'ei' frequency = 55.2 Hz (vibrations = 7.9%, smoothing ~= 0.106, score = 0.005045)\nTo avoid too much smoothing with 'ei', suggested max_accel <= 5700 mm/sec^2\n"
+"Fitted shaper '2hump_ei' frequency = 52.8 Hz (vibrations = 2.0%, smoothing ~= 0.194, score = 0.003222)\nTo avoid too much smoothing with '2hump_ei', suggested max_accel <= 3100 mm/sec^2\n"
+"Fitted shaper '3hump_ei' frequency = 51.2 Hz (vibrations = 0.4%, smoothing ~= 0.313, score = 0.003469)\nTo avoid too much smoothing with '3hump_ei', suggested max_accel <= 1800 mm/sec^2\n"
+"Recommended shaper_type_x = 2hump_ei, shaper_freq_x = 52.8\n",
+"Fitted shaper 'zv' frequency = 52.0 Hz (vibrations = 34.4%, smoothing ~= 0.063, score = 0.017727)\nTo avoid too much smoothing with 'zv', suggested max_accel <= 10500 mm/sec^2\n"
+"Fitted shaper 'mzv' frequency = 38.0 Hz (vibrations = 13.9%, smoothing ~= 0.141, score = 0.012678)\nTo avoid too much smoothing with 'mzv', suggested max_accel <= 4300 mm/sec^2\n"
+"Fitted shaper 'ei' frequency = 48.6 Hz (vibrations = 14.0%, smoothing ~= 0.136, score = 0.012346)\nTo avoid too much smoothing with 'ei', suggested max_accel <= 4400 mm/sec^2\n"
+"Fitted shaper '2hump_ei' frequency = 46.4 Hz (vibrations = 7.4%, smoothing ~= 0.251, score = 0.011191)\nTo avoid too much smoothing with '2hump_ei', suggested max_accel <= 2300 mm/sec^2\n"
+"Fitted shaper '3hump_ei' frequency = 50.6 Hz (vibrations = 5.9%, smoothing ~= 0.320, score = 0.011544)\nTo avoid too much smoothing with '3hump_ei', suggested max_accel <= 1700 mm/sec^2\n"
+"Recommended shaper_type_y = mzv, shaper_freq_y = 38.0\n"};
+static lv_obj_t *sh_demo(int perfil, int eixo)
+{
+    lv_obj_t *t = tela_shaper();
+    memset(n_shp, 0, sizeof n_shp);
+    for (int ax = 0; ax < 2; ax++) parse_shaper(SH_DEMO[ax], ax);
+    sh_perfil = perfil; sh_perfis(); sh_fase = 2; sh_eixo_vista = eixo; sh_desenhar();
+    return t;
+}
+lv_obj_t *tela_shaper_demo_media(void) { return sh_demo(1, 0); }
+lv_obj_t *tela_shaper_demo_alta(void) { return sh_demo(0, 1); }
+lv_obj_t *tela_shaper_demo_rapida(void) { return sh_demo(2, 1); }
+lv_obj_t *tela_shaper_demo_calc(void) { lv_obj_t *t = tela_shaper(); sh_fase = 3; sh_calc_ini = hi_agora() - 42; sh_desenhar(); return t; }

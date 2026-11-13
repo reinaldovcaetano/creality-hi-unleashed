@@ -235,7 +235,8 @@ void hi_reiniciando(const char *motivo, const char *depois)
     snprintf(re_motivo, sizeof re_motivo, "%s", motivo ? motivo : "");
     re_fase = 0; re_inicio = hi_agora();
 }
-static void re_fechar(void *u) { (void)u; if (re_tela) { lv_obj_del(re_tela); re_tela = NULL; } }
+hi_ok_cb hi_reiniciando_depois; void *hi_reiniciando_depois_ud;
+static void re_fechar(void *u) { (void)u; hi_reiniciando_depois = NULL; if (re_tela) { lv_obj_del(re_tela); re_tela = NULL; } }
 static void re_ev_fechar(lv_event_t *e) { (void)e; re_fechar(NULL); }
 static void reinicio_tique(const hi_estado_t *e)
 {
@@ -245,7 +246,9 @@ static void reinicio_tique(const hi_estado_t *e)
     /* fase 0: espera o Klipper SAIR do "ready" (o comando ainda pode estar na fila); fase 1: espera VOLTAR */
     if (re_fase == 0 && (!pronto || dt > 12)) re_fase = 1;
     if (re_fase == 1 && pronto && dt > 2) {
+        hi_ok_cb f = hi_reiniciando_depois; void *fu = hi_reiniciando_depois_ud;
         re_fechar(NULL);
+        if (f) { f(fu); return; }
         hi_toast(re_depois[0] ? re_depois : LV_SYMBOL_OK "  Klipper pronto", COR_OK);
         return;
     }
