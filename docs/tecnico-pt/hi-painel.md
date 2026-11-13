@@ -373,3 +373,21 @@ O `idle_timeout` fica "Printing" enquanto o comando roda e depois volta. O resul
   - tela de queda de energia própria;
   - empacotar o Hi Painel na OTA;
   - teste de boot como tela padrão (o usuário ainda não reiniciou).
+
+## Ajustes de 13/11/2026 (~18h às 19h40)
+
+- **Carregar filamento** usa a macro original `LOAD_MATERIAL` (vai à posição de descarte, purga e limpa). Antes o filamento caía na mesa. Os botões +10/-10 também vão antes para a posição de descarte.
+- **Nivelamento e malha** roda a `G29` da Creality (limpa o bico, G28 Z, `Z_TILT_ADJUST`, malha, `CXSAVE_CONFIG`).
+  - Antes de começar, confere o sensor de filamento do cabeçote. Se houver filamento, abre "Retire o filamento", com atalho para descarregar.
+  - Se houver calibração não salva, pergunta se grava junto, descarta ou volta. Isso porque o `CXSAVE_CONFIG` grava **todas** as pendências.
+  - A temperatura da mesa pode ser editada (40–110 °C). O padrão é a mesa do filamento ativo, e a tela mostra em que temperatura a malha salva foi medida.
+- **Calibrar tudo**, na ordem: home → vibração → PID do bico → PID da mesa → malha (com a mesa já quente). O nível Z é opcional. No fim, avisa que a malha já está ativa e gravada.
+- **Ventoinha da peça:**
+  - A Creality limita a 50% reais (o M106 divide por 2). O M106 agora escala por `PRINTER_PARAM.fan0_max_pct`, com padrão 50, idêntico à Creality (`scripts/macro_ventoinha.py`).
+  - Tela Ajustes > Ventoinha da peça: deslizador de 20 a 100%, Testar/Parar e Salvar. Ao sair sem salvar, desliga o teste (M107, fora de impressão) e devolve o valor salvo.
+  - No Controle e no Ajustar ao vivo, a janela da ventoinha mostra a velocidade **real** de 20 a 100% (`SET_PIN PIN=fan0`).
+- **Reiniciando o Klipper:** em todo FIRMWARE_RESTART/SAVE_CONFIG, uma tela de espera só sai quando o Klipper volta a ficar pronto. Depois de 3 min, oferece Fechar.
+- **Imprimir:** abre um menu com "Medir malha e imprimir" (padrão), "Usar malha salva", "Descartar pendências" (só aparece se houver) e Voltar. Mostra a mesa do arquivo e a da malha salva. Ver `calibracoes.md`.
+- **Menu (`hi_menu`):** o texto quebra linha e a altura é medida. Os botões encolhem se não couberem.
+- **Desempenho:** quando a tela da Creality está na frente ou em descanso, o painel consulta o Moonraker a cada 4 s (na frente, a cada 0,7 s). A matriz da malha vem a cada 10 consultas.
+- **Build:** os Makefiles recompilam quando um `.h` muda. Uma mudança na estrutura de estado tinha dado segfault no mock.

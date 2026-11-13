@@ -46,3 +46,25 @@ sensor de pressão (`prtouch_v3`) e o home preciso (`NEXT_HOMEZ_NACCU`).
 - O Hi Painel consulta a cada 0,7 s só quando está na frente; com a tela da Creality ou em descanso, a cada 4 s. A matriz da malha vem a cada 10 consultas.
 - Medido parado: CPU ~22% ocupada (2 núcleos a 1,2 GHz), ~378 MB de RAM livres de 500, 38 °C.
 - Serviços: o pacote não sobe mais o `web-server` (app/nuvem Creality, portas 80/443/9998/9999) nem o `webrtc` da nuvem. A câmera do Fluidd continua (`cam_app` + `webrtc_local` na 8000). SSH só na 2222. Relógio pelo NTP.br (`a.st1.ntp.br`, `0/1.br.pool.ntp.org`). Para quem já tem a Hi instalada, o `hi-ajustes` aplica o mesmo no boot. **Consequência:** o app Creality Print/Cloud deixa de enxergar a impressora (use Fluidd e Hi Painel).
+
+## Backup e como voltar atrás
+
+- Antes de qualquer mudança, os arquivos foram copiados para `printer_data/config/backup-antes-otimizacao-20261113-1615/`:
+  - todos os `.cfg`;
+  - `webhooks.py.original`;
+  - `sistema/` com `system`, `dropbear`, `app`, `hi-diag` e `hi-ajustes`.
+- Para voltar as calibrações: copie os `.cfg` do backup de volta e rode `FIRMWARE_RESTART`.
+- Para voltar o log: copie o `webhooks.py.original` para `/usr/share/klipper/klippy/webhooks.py`, apague o `.pyc` e rode `/etc/init.d/klipper restart`.
+- Para voltar os serviços:
+  1. copie `system`, `dropbear` e `app` de volta (`/etc/config/` e `/etc/init.d/`);
+  2. rode `/etc/init.d/webrtc enable`, `/etc/init.d/webrtc start` e `/etc/init.d/app restart`.
+  - Atenção: o `hi-ajustes` reaplica a função `sistema` no boot. Para desativar de vez, comente a chamada a `sistema` nele.
+
+## Falta testar na prática
+
+- Uma impressão com "Medir malha e imprimir" e outra com "Usar malha salva".
+- Um Z tilt, para ver quantas tentativas leva com a tolerância de 0,03.
+- Uma medição nova de vibração pelo painel (para ver se ele prefere o mzv).
+- `G29 BED=` com temperatura diferente de 60 °C (esperando a mesa aquecer).
+- Um boot completo, para conferir que o SSH do sistema sobe na 2222, que a 22 fica fechada e que o web-server e o webrtc não voltam.
+- Uma queda de energia real durante a impressão.
