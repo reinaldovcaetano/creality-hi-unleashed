@@ -19,6 +19,10 @@
 
 ---
 
+## Descarga (alfa)
+
+Hay una imagen lista para instalar en **[Releases → v1.2.0.0-alpha](https://github.com/reinaldovcaetano/creality-hi-unleashed/releases/tag/v1.2.0.0-alpha)**. No incluye clave SSH ni calibración personal. Lea el aviso de arriba antes de instalar; para usar su propia clave SSH, compile la imagen usted mismo.
+
 ## Qué obtiene
 
 | | Creality de fábrica 1.1.0.74 | Creality Hi Unleashed (alfa, OTA 1.2.0.0) |

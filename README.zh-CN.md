@@ -19,6 +19,10 @@
 
 ---
 
+## 下载（alpha）
+
+可直接安装的镜像位于 **[Releases → v1.2.0.0-alpha](https://github.com/reinaldovcaetano/creality-hi-unleashed/releases/tag/v1.2.0.0-alpha)**，不含 SSH 密钥和个人校准数据。安装前请先阅读上方警告；如需加入自己的 SSH 密钥，请自行编译镜像。
+
 ## 你能得到什么
 
 | | Creality 官方 1.1.0.74 | Creality Hi Unleashed（alpha，OTA 1.2.0.0） |
