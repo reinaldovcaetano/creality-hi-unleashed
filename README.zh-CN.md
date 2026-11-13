@@ -165,6 +165,8 @@ docs/tecnico-pt/             完整实验记录（葡萄牙语）
 
 ## 致谢与许可
 
+- **借助 Anthropic 的 [Claude](https://claude.ai)（通过 Claude Code）完成。**Claude 与作者一起完成了固件拆解、内核与 Wi-Fi 移植、在打印机上的现场调试（包括 PG9/I2C 缺陷）、编译流程、测试，以及这份四种语言的文档。🤖🤝
+
 - **Creality：**Hi_Klipper（GPL-3.0）。OTA 属于 Creality，本仓库**不**分发。
 - **全志 Tina Linux 5.4 BSP：**`bazzonrobocon` 的镜像（GPL-2.0）。我们的内核补丁为 GPL-2.0。
 - **linux-backports**、**linux-firmware**、**wireless-regdb：**kernel.org。

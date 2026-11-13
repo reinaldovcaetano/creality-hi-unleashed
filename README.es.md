@@ -165,6 +165,8 @@ docs/tecnico-pt/             notas completas del laboratorio (portugués)
 
 ## Créditos y licencias
 
+- **Hecho con la ayuda de [Claude](https://claude.ai) (Anthropic), a través de Claude Code.** Claude trabajó junto al autor en el desmontaje del firmware, el port del kernel y del Wi-Fi, la depuración en vivo en la impresora (incluido el fallo PG9/I2C), el proceso de build, las pruebas y esta documentación en cuatro idiomas. 🤖🤝
+
 - **Creality:** Hi_Klipper (GPL-3.0). La OTA es de Creality y **no** se redistribuye aquí.
 - **BSP Allwinner Tina Linux 5.4:** espejo de `bazzonrobocon` (GPL-2.0). Nuestros parches de kernel son GPL-2.0.
 - **linux-backports**, **linux-firmware** y **wireless-regdb:** kernel.org.

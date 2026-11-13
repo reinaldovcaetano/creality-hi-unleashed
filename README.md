@@ -165,6 +165,8 @@ docs/tecnico-pt/             full lab notes (Portuguese)
 
 ## Credits and licenses
 
+- **Built with [Claude](https://claude.ai) (Anthropic), through Claude Code.** Claude worked alongside the author on the firmware teardown, the kernel and Wi-Fi porting, the live debugging on the printer (including the PG9/I2C bug), the build pipeline, the tests and this documentation in four languages. 🤖🤝
+
 - **Creality:** Hi_Klipper (GPL-3.0); the OTA is Creality's and is **not** redistributed here.
 - **Allwinner Tina Linux 5.4 BSP:** mirror by `bazzonrobocon` (GPL-2.0). Our kernel patches are GPL-2.0.
 - **linux-backports**, **linux-firmware** and **wireless-regdb:** kernel.org.
