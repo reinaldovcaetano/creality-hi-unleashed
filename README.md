@@ -25,7 +25,7 @@ A ready-to-install image is available in **[Releases → v1.2.0.0-alpha](https:/
 
 ## What you get
 
-| | Stock Creality 1.1.0.74 | Creality Hi Unleashed (alpha, OTA 1.2.0.0) |
+| | Stock Creality 1.1.0.74 | Creality Hi Unleashed (alpha, OTA 1.2.1.0) |
 |---|---|---|
 | Wi-Fi | Internal AIC8800DC, **2.4 GHz only** | **5 GHz Wi-Fi 6** with a MediaTek **MT7921AU** USB dongle (tested: 80 MHz, 2×2, 1200 Mbit/s link). The internal chip stays as a fallback. |
 | Wireless stack | cfg80211/mac80211 built into the 5.4 kernel | **linux-backports 6.1.145** (cfg80211, mac80211, mt76, mt7921u) + AIC8800 driver ported to it |
@@ -37,6 +37,7 @@ A ready-to-install image is available in **[Releases → v1.2.0.0-alpha](https:/
 | Creality cloud, ADB | on | **off** (cloud domains blocked, ADB disabled) |
 | SSH | port 22 | extra **dropbear on port 2222** with key login and a detailed log |
 | Install safety | A/B switch | **One-shot boot test**: the new half is booted once and only becomes official after it passes the test |
+| Touch screen | Creality's closed UI | **Hi Painel**: our own modern UI (LVGL 8.3) with live data, editable calibrations (PID, input shaper with graph, bed mesh, Z tilt, PA, ideal speed), print with thumbnails, live tuning, filament manager, Wi-Fi with keyboard, maintenance reminders and power-loss resume. Creality's UI stays one tap away. |
 
 ## How it was done (short story)
 
@@ -89,7 +90,8 @@ git clone https://github.com/reinaldovcaetano/creality-hi-unleashed && cd creali
 #    pacote/local/authorized_keys     -> your SSH public key (login on port 2222)
 #    pacote/local/save_config.txt     -> your printer's SAVE_CONFIG block (restored after a reset)
 docker compose run --rm kbuild        # kernel + backports + AIC8800 -> pacote/p2/   (~10-15 min)
-docker compose run --rm pack          # OTA -> saida/CR4NU200360C20_ota_img_V1.2.0.0.img
+docker compose run --rm painel        # Hi Painel (on-screen UI) -> pacote/painel/   (~1 min)
+docker compose run --rm pack          # OTA -> saida/CR4NU200360C20_ota_img_V1.2.1.0.img
 ./tests/rodar-testes.sh               # tests the boot scripts inside an emulated ARM (busybox of the image)
 ```
 
@@ -107,7 +109,7 @@ They only contain the tools: Debian bookworm, the ARM cross compiler and squashf
 
 ## Install
 
-1. Use a USB stick formatted as **FAT32**, with only `CR4NU200360C20_ota_img_V1.2.0.0.img` in its root. Do not rename the file.
+1. Use a USB stick formatted as **FAT32**, with only `CR4NU200360C20_ota_img_V1.2.1.0.img` in its root. Do not rename the file.
 2. With the printer idle, plug in the stick and confirm the update on the screen.
 3. **Wait about 7 minutes.** The printer reboots once into the new system, runs the boot test, and then:
    - **passes:** the new half becomes official (`logs/hi-confirma.log` says `CONFIRMADO`);
@@ -124,6 +126,15 @@ After installing:
 
 > [!IMPORTANT]
 > Do **not** install official Creality updates on top of this firmware. They would replace the kernel and the 5 GHz drivers. Use builds from this project.
+
+## Hi Painel (the new touch screen)
+
+- **Default screen at boot.** Creality's screen starts first; as soon as it reaches its home page, Hi Painel takes over. It does **not** take over while printing or when a USB update is plugged in, so Creality's installer works as before.
+- **Power loss:** if a print was interrupted, Hi Painel shows *Continue / Discard*. It uses the same Klipper commands as Creality: `SDCARD_PRINT_FILE ... ISCONTINUEPRINT=True` and `pause_resume/cancel_continue_print`. You can also choose to decide on Creality's screen.
+- **Go to Creality's screen:** the *Creality* button. **Come back:** on Creality's screen, tap the robot, then *Help*, then *Wiki*.
+- **Calibrations:** each one shows the default value, lets you edit it, runs live and compares *current × new* before saving. Saving always backs up `printer.cfg` first. *Ideal speed* also updates the acceleration cap in the macros.
+- **Disable it:** run `touch /mnt/UDISK/hi-painel/desligado` and reboot. A test build in `/mnt/UDISK/hi-painel/hi-painel` takes priority over the packaged one.
+- **Screens preview without hardware:** `hi-painel/mock` (`make -f Makefile.mock`, `HI_MOONRAKER=<printer-ip>` for live data).
 
 ## Recovery
 

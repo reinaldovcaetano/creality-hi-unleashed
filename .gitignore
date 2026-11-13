@@ -6,3 +6,7 @@ pacote/local/
 .DS_Store
 *.pyc
 __pycache__/
+hi-painel/lib/
+hi-painel/build/
+hi-painel/mock/png/
+pacote/painel/

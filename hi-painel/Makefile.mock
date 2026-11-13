@@ -1,0 +1,9 @@
+# Gera as imagens das telas (roda no container kbuild, gcc nativo)
+LV=lib/lvgl
+SRC=$(shell find $(LV)/src -name "*.c") $(wildcard fontes/*.c) $(wildcard src/ui/*.c) $(wildcard src/dados/*.c) lib/cjson/cJSON.c mock/mock.c
+OBJ=$(patsubst %.c,build/mock/%.o,$(SRC))
+CFLAGS=-O1 -w -I. -Isrc -I$(LV) -DLV_CONF_INCLUDE_SIMPLE -DLV_LVGL_H_INCLUDE_SIMPLE
+build/mock/%.o: %.c src/lv_conf.h
+	@mkdir -p $(dir $@); $(CC) $(CFLAGS) -c $< -o $@
+build/mock/hi-mock: $(OBJ)
+	$(CC) $^ -lm -lpthread -o $@

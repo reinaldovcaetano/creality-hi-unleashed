@@ -1,6 +1,7 @@
 # Creality Hi Unleashed: containers usados para compilar e testar.
 #   1) scripts/obter-insumos.sh              (no seu computador: baixa e confere os insumos)
 #   2) docker compose run --rm kbuild        (kernel + Wi-Fi -> pacote/p2/)
+#      docker compose run --rm painel        (Hi Painel, a tela própria -> pacote/painel/)
 #   3) docker compose run --rm pack          (monta a OTA -> saida/)
 #   4) tests/rodar-testes.sh                 (testes dos scripts num ARM emulado)
 name: creality-hi-unleashed
@@ -12,6 +13,13 @@ services:
       - .:/repo
       - kernel-work:/work          # disco que diferencia maiúsculas/minúsculas (obrigatório no macOS/Windows)
     command: bash /repo/kernel/build-kernel.sh
+  painel:
+    build: { context: ., dockerfile: docker/kbuild.Dockerfile }
+    image: ghcr.io/reinaldovcaetano/creality-hi-unleashed-kbuild:alpha
+    volumes:
+      - .:/repo
+    working_dir: /repo/hi-painel
+    command: bash -c "make -s -f Makefile.arm -j$$(nproc) && mkdir -p ../pacote/painel && cp build/arm/hi-painel ../pacote/painel/ && ls -la ../pacote/painel/hi-painel"
   pack:
     build: { context: ., dockerfile: docker/pack.Dockerfile }
     image: ghcr.io/reinaldovcaetano/creality-hi-unleashed-pack:alpha

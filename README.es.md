@@ -25,7 +25,7 @@ Hay una imagen lista para instalar en **[Releases → v1.2.0.0-alpha](https://gi
 
 ## Qué obtiene
 
-| | Creality de fábrica 1.1.0.74 | Creality Hi Unleashed (alfa, OTA 1.2.0.0) |
+| | Creality de fábrica 1.1.0.74 | Creality Hi Unleashed (alfa, OTA 1.2.1.0) |
 |---|---|---|
 | Wi-Fi | AIC8800DC interno, **solo 2,4 GHz** | **Wi-Fi 6 en 5 GHz** con el adaptador USB MediaTek **MT7921AU** (probado: 80 MHz, 2×2, enlace de 1200 Mbit/s). El chip interno queda de respaldo. |
 | Pila inalámbrica | cfg80211/mac80211 integrados en el kernel 5.4 | **linux-backports 6.1.145** (cfg80211, mac80211, mt76, mt7921u) + driver AIC8800 portado a ella |
@@ -37,6 +37,7 @@ Hay una imagen lista para instalar en **[Releases → v1.2.0.0-alpha](https://gi
 | Nube de Creality, ADB | activados | **desactivados** (dominios de la nube bloqueados, ADB desactivado) |
 | SSH | puerto 22 | **dropbear adicional en el puerto 2222**, con inicio de sesión por clave y log detallado |
 | Seguridad de instalación | cambio A/B | **prueba de arranque única**: la mitad nueva arranca una vez y solo pasa a ser la oficial después de superar la prueba |
+| Pantalla táctil | interfaz cerrada de Creality | **Hi Painel**: interfaz propia y moderna (LVGL 8.3) con datos en vivo, calibraciones editables (PID, input shaper con gráfico, malla, Z tilt, PA, velocidad ideal), impresión con miniaturas, ajustes en vivo, banco de filamentos, Wi-Fi con teclado, recordatorios de mantenimiento y reanudación tras corte de luz. La pantalla de Creality queda a un toque. |
 
 ## Cómo se hizo (resumen)
 
@@ -89,7 +90,8 @@ git clone https://github.com/reinaldovcaetano/creality-hi-unleashed && cd creali
 #    pacote/local/authorized_keys     -> su clave pública SSH (acceso en el puerto 2222)
 #    pacote/local/save_config.txt     -> el bloque SAVE_CONFIG de SU impresora (se restaura tras un reset)
 docker compose run --rm kbuild        # kernel + backports + AIC8800 -> pacote/p2/   (~10-15 min)
-docker compose run --rm pack          # OTA -> saida/CR4NU200360C20_ota_img_V1.2.0.0.img
+docker compose run --rm painel        # Hi Painel (pantalla propia) -> pacote/painel/   (~1 min)
+docker compose run --rm pack          # OTA -> saida/CR4NU200360C20_ota_img_V1.2.1.0.img
 ./tests/rodar-testes.sh               # prueba los scripts de arranque en un ARM emulado (busybox de la imagen)
 ```
 
@@ -107,7 +109,7 @@ Solo contienen las herramientas: Debian bookworm, el compilador cruzado ARM y sq
 
 ## Instalación
 
-1. Use un pendrive en **FAT32**, solo con `CR4NU200360C20_ota_img_V1.2.0.0.img` en la raíz. No cambie el nombre del archivo.
+1. Use un pendrive en **FAT32**, solo con `CR4NU200360C20_ota_img_V1.2.1.0.img` en la raíz. No cambie el nombre del archivo.
 2. Con la impresora detenida, conecte el pendrive y confirme la actualización en la pantalla.
 3. **Espere unos 7 minutos.** La impresora reinicia una vez en el sistema nuevo, hace la prueba de arranque y entonces:
    - **si la supera:** la mitad nueva pasa a ser la oficial (`logs/hi-confirma.log` dice `CONFIRMADO`);
@@ -124,6 +126,15 @@ Después de instalar:
 
 > [!IMPORTANT]
 > **No** instale actualizaciones oficiales de Creality encima de este firmware. Reemplazarían el kernel y se perderían los drivers de 5 GHz. Use builds de este proyecto.
+
+## Hi Painel (la pantalla nueva)
+
+- **Pantalla por defecto al encender.** La pantalla de Creality arranca primero; cuando llega a su inicio, Hi Painel toma el control. **No** lo toma durante una impresión ni con un pendrive de actualización, para que el instalador de Creality funcione como siempre.
+- **Corte de luz:** si una impresión se interrumpió, Hi Painel muestra *Continuar / Descartar*. Usa los mismos comandos de Klipper que Creality: `SDCARD_PRINT_FILE ... ISCONTINUEPRINT=True` y `pause_resume/cancel_continue_print`. También se puede elegir decidir en la pantalla de Creality.
+- **Ir a la pantalla de Creality:** botón *Creality*. **Volver:** en la pantalla de Creality, toque el robot, luego *Ayuda* y después *Wiki*.
+- **Calibraciones:** cada una muestra el valor por defecto, permite editarlo, se ejecuta en vivo y compara *actual × nuevo* antes de guardar. Al guardar, siempre hace antes una copia de seguridad de `printer.cfg`. *Velocidad ideal* también actualiza el tope de aceleración de las macros.
+- **Desactivar:** ejecute `touch /mnt/UDISK/hi-painel/desligado` y reinicie. Una versión de prueba en `/mnt/UDISK/hi-painel/hi-painel` tiene prioridad sobre la del paquete.
+- **Ver las pantallas sin la impresora:** `hi-painel/mock` (`make -f Makefile.mock`; `HI_MOONRAKER=<ip-de-la-impresora>` usa datos en vivo).
 
 ## Recuperación
 

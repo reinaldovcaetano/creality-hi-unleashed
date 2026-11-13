@@ -23,8 +23,16 @@ mt7961_ram.bin     b94217a951518a9c14095765f367bc5dd7698f2dc033941d6f18fc2ebd6a2
 regulatory.db      7e236caecd939c8ec98be4870bf30422f28ffef2565a38aaaa2d9ddabd0c2641 https://git.kernel.org/pub/scm/linux/kernel/git/wens/wireless-regdb.git/plain/regulatory.db
 regulatory.db.p7s  50332f0db09b8bcc719235ec4985c27377f2cc2f42abb7b5dcf951866c5a888a https://git.kernel.org/pub/scm/linux/kernel/git/wens/wireless-regdb.git/plain/regulatory.db.p7s
 fluidd.zip         71b29320c59d185a52a06250a17ed494a471ea163d1d9c4a821b9cb4bf57dd97 https://github.com/fluidd-core/fluidd/releases/download/v1.38.0/fluidd.zip
+lvgl.tar.gz        83b7325a4b78cbb19a39f3ac75346c8086926d7faeab5ff2d825c20da0bbdb46 https://github.com/lvgl/lvgl/archive/refs/tags/v8.3.11.tar.gz
+cJSON.c            75c51de8fa40ac9d7a99319c6330719bd692eb81c0a869265f3d4c682533f9b9 https://raw.githubusercontent.com/DaveGamble/cJSON/v1.7.18/cJSON.c
+cJSON.h            0578cc29132912edbc88f83207a8fc76e5db3db0605497e909a9384ef3cc474b https://raw.githubusercontent.com/DaveGamble/cJSON/v1.7.18/cJSON.h
 EOF
 # os arquivos de firmware/regdb mudam no upstream com o tempo: se o SHA não bater, confira a versão antes de aceitar.
+
+echo "LVGL 8.3.11 e cJSON 1.7.18 -> hi-painel/lib/"
+rm -rf hi-painel/lib; mkdir -p hi-painel/lib/lvgl hi-painel/lib/cjson
+tar xzf $I/lvgl.tar.gz -C hi-painel/lib/lvgl --strip-components=1
+cp $I/cJSON.c $I/cJSON.h hi-painel/lib/cjson/
 
 echo "Fluidd 1.38.0 -> pacote/fluidd/fluidd"
 rm -rf pacote/fluidd/fluidd; mkdir -p pacote/fluidd/fluidd

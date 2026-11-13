@@ -25,7 +25,7 @@
 
 ## 你能得到什么
 
-| | Creality 官方 1.1.0.74 | Creality Hi Unleashed（alpha，OTA 1.2.0.0） |
+| | Creality 官方 1.1.0.74 | Creality Hi Unleashed（alpha，OTA 1.2.1.0） |
 |---|---|---|
 | Wi-Fi | 内置 AIC8800DC，**仅 2.4 GHz** | 使用联发科 **MT7921AU** USB 网卡实现 **5 GHz Wi-Fi 6**（实测：80 MHz、2×2、连接速率 1200 Mbit/s）。内置芯片保留作备用。 |
 | 无线协议栈 | cfg80211/mac80211 编译进 5.4 内核 | **linux-backports 6.1.145**（cfg80211、mac80211、mt76、mt7921u），并将 AIC8800 驱动移植到其上 |
@@ -37,6 +37,7 @@
 | Creality 云、ADB | 开启 | **关闭**（屏蔽云端域名，禁用 ADB） |
 | SSH | 22 端口 | 额外的 **2222 端口 dropbear**，支持密钥登录和详细日志 |
 | 安装安全性 | A/B 切换 | **一次性启动测试**：新分区只启动一次，通过测试后才成为正式分区 |
+| 触摸屏 | Creality 封闭界面 | **Hi Painel**：自研现代界面（LVGL 8.3）。提供实时数据、可编辑的校准（PID、带图表的输入整形、网床、Z 调平、PA、理想速度）、带缩略图的打印、实时调整、耗材库、带键盘的 Wi-Fi、维护提醒和断电续打。Creality 原界面一键可达。 |
 
 ## 实现过程（简述）
 
@@ -89,7 +90,8 @@ git clone https://github.com/reinaldovcaetano/creality-hi-unleashed && cd creali
 #    pacote/local/authorized_keys     -> 你的 SSH 公钥（用于 2222 端口登录）
 #    pacote/local/save_config.txt     -> 你这台打印机的 SAVE_CONFIG 块（重置后自动恢复）
 docker compose run --rm kbuild        # 内核 + backports + AIC8800 -> pacote/p2/  （约 10-15 分钟）
-docker compose run --rm pack          # 生成 OTA -> saida/CR4NU200360C20_ota_img_V1.2.0.0.img
+docker compose run --rm painel        # Hi Painel（自研界面）-> pacote/painel/  （约 1 分钟）
+docker compose run --rm pack          # 生成 OTA -> saida/CR4NU200360C20_ota_img_V1.2.1.0.img
 ./tests/rodar-testes.sh               # 在模拟的 ARM 环境中（使用镜像自带的 busybox）测试启动脚本
 ```
 
@@ -107,7 +109,7 @@ docker compose pull      # ghcr.io/reinaldovcaetano/creality-hi-unleashed-{kbuil
 
 ## 安装
 
-1. 准备一个 **FAT32** 格式的 U 盘，根目录只放 `CR4NU200360C20_ota_img_V1.2.0.0.img`，不要改文件名。
+1. 准备一个 **FAT32** 格式的 U 盘，根目录只放 `CR4NU200360C20_ota_img_V1.2.1.0.img`，不要改文件名。
 2. 打印机空闲时插入 U 盘，在屏幕上确认升级。
 3. **等待约 7 分钟。**打印机会重启进入新系统一次，执行启动测试，然后：
    - **通过：**新分区成为正式分区（`logs/hi-confirma.log` 显示 `CONFIRMADO`）；
@@ -124,6 +126,15 @@ docker compose pull      # ghcr.io/reinaldovcaetano/creality-hi-unleashed-{kbuil
 
 > [!IMPORTANT]
 > **不要**在本固件之上安装 Creality 官方更新。官方更新会替换内核，5 GHz 驱动也会随之丢失。请使用本项目的编译版本。
+
+## Hi Painel（新触摸界面）
+
+- **开机默认界面。** Creality 界面先启动，进入主页后由 Hi Painel 接管。打印过程中或插着升级 U 盘时**不会**接管，Creality 的安装器照常工作。
+- **断电：** 如果打印被中断，Hi Painel 会显示 *继续 / 放弃*。它使用与 Creality 相同的 Klipper 命令：`SDCARD_PRINT_FILE ... ISCONTINUEPRINT=True` 和 `pause_resume/cancel_continue_print`。也可以选择在 Creality 界面上处理。
+- **切到 Creality 界面：** 点 *Creality* 按钮。**切回来：** 在 Creality 界面依次点机器人图标、*帮助*、*Wiki*。
+- **校准：** 每项都显示默认值、可以编辑、实时运行，并在保存前对比 *当前 × 新值*。保存前一定会先备份 `printer.cfg`。*理想速度* 还会同时更新宏里的加速度上限。
+- **关闭：** 执行 `touch /mnt/UDISK/hi-painel/desligado` 后重启。放在 `/mnt/UDISK/hi-painel/hi-painel` 的测试版本优先于安装包里的版本。
+- **无需打印机预览界面：** `hi-painel/mock`（`make -f Makefile.mock`；设置 `HI_MOONRAKER=<打印机IP>` 可使用实时数据）。
 
 ## 恢复
 

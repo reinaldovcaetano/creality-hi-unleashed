@@ -112,6 +112,18 @@ cp -a /pacote/overlay-p2/etc/init.d/hi-confirma $F/etc/init.d/hi-confirma; chown
 ln -sf ../init.d/hi-confirma $F/etc/rc.d/S99hi-confirma
 fi
 
+echo "[4e/7] Hi Painel (tela própria)"
+if [ -x /pacote/painel/hi-painel ]; then
+  install -m 755 /pacote/painel/hi-painel $F/usr/bin/hi-painel
+  chmod 755 $F/etc/init.d/hi-painel
+  ln -sf ../init.d/hi-painel $F/etc/rc.d/S99hi-painel
+  ln -sf ../init.d/hi-painel $F/etc/rc.d/K05hi-painel
+  echo "  hi-painel $(wc -c < /pacote/painel/hi-painel) bytes"
+else
+  rm -f $F/etc/init.d/hi-painel
+  echo "  sem pacote/painel/hi-painel: pacote sai sem a tela própria"
+fi
+
 echo "[5/7] serviços, cron e versão"
 ln -sf ../init.d/hi-diag $F/etc/rc.d/S99hi-diag
 ln -sf ../init.d/hi-ajustes $F/etc/rc.d/S54hi-ajustes
