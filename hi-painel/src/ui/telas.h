@@ -31,6 +31,7 @@ lv_obj_t *tela_ajustes(void);
 lv_obj_t *tela_rede(void);
 lv_obj_t *tela_tela(void);
 lv_obj_t *tela_sobre(void);
+lv_obj_t *tela_ventoinha(void);
 
 /* manutenção e queda de energia */
 lv_obj_t *tela_manutencao(void);

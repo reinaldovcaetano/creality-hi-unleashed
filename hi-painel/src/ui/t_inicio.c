@@ -15,7 +15,7 @@ static void aplicar_mesa(double v, void *ud) { (void)ud; hi_gcode("M140 S%.0f", 
 static void ev_bico(lv_event_t *e) { (void)e; hi_teclado_num("Temperatura do bico (0 desliga)", hi_e.bico_alvo, 0, 300, 0, aplicar_bico, NULL); }
 static void ev_mesa(lv_event_t *e) { (void)e; hi_teclado_num("Temperatura da mesa (0 desliga)", hi_e.mesa_alvo, 0, 110, 0, aplicar_mesa, NULL); }
 
-static void reiniciar_fw(void *ud) { (void)ud; hi_gcode("FIRMWARE_RESTART"); hi_toast("Reiniciando o Klipper...", COR_AVISO); }
+static void reiniciar_fw(void *ud) { (void)ud; hi_gcode("FIRMWARE_RESTART"); hi_reiniciando("FIRMWARE_RESTART", NULL); }
 static void ev_estado(lv_event_t *e)
 {
     (void)e;

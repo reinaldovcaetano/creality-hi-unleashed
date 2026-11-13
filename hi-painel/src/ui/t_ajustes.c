@@ -13,7 +13,7 @@
 void hi_brilho(int v);          /* main_fb.c */
 int  hi_brilho_atual(void);
 
-static void reiniciar_fw(void *u) { (void)u; hi_gcode("FIRMWARE_RESTART"); hi_toast("Reiniciando o Klipper...", COR_AVISO); }
+static void reiniciar_fw(void *u) { (void)u; hi_gcode("FIRMWARE_RESTART"); hi_reiniciando("FIRMWARE_RESTART", NULL); }
 static void ev_reiniciar(lv_event_t *e) { (void)e; if (hi_ocupada(&hi_e)) { hi_toast("Indisponível durante a impressão", COR_AVISO); return; } hi_confirmar("Reiniciar o Klipper?", "Reinicia o firmware (FIRMWARE_RESTART). Leva uns 20 s.", "Reiniciar", COR_AVISO, reiniciar_fw, NULL); }
 static void reboot_sis(void *u) { (void)u; hi_toast("Reiniciando a impressora...", COR_AVISO); system("sync; (sleep 2; reboot) &"); }
 static void ev_reboot(lv_event_t *e) { (void)e; if (hi_ocupada(&hi_e)) { hi_toast("Indisponível durante a impressão", COR_AVISO); return; } hi_confirmar("Reiniciar a impressora?", "Reinicia o sistema inteiro (leva ~1 min).", "Reiniciar", COR_AVISO, reboot_sis, NULL); }
@@ -38,6 +38,8 @@ lv_obj_t *tela_ajustes(void)
     char r[96]; snprintf(r, sizeof r, "%s  \xE2\x80\xA2  %s", hi_e.ssid[0] ? hi_e.ssid : "sem Wi-Fi", hi_e.ip[0] ? hi_e.ip : "sem IP");
     hi_ao_clicar(hi_item(l, LV_SYMBOL_WIFI, COR_OK, "Rede", r), tela_rede);
     hi_ao_clicar(hi_item(l, LV_SYMBOL_EYE_OPEN, COR_DESTAQUE, "Tela", "brilho e descanso"), tela_tela);
+    { int v = hi_cfg_ventoinha_max(); char d[64]; if (v > 0) snprintf(d, sizeof d, "velocidade máxima %d%%%s", v, v == 50 ? " (padrão Creality)" : ""); else snprintf(d, sizeof d, "velocidade máxima");
+      hi_ao_clicar(hi_item(l, LV_SYMBOL_REFRESH, COR_MESA, "Ventoinha da peça (bico)", d), tela_ventoinha); }
     { int p = hi_manutencao_pendentes(); char m[64]; if (p) snprintf(m, sizeof m, "%d item(ns) pendente(s)", p); else snprintf(m, sizeof m, "tudo em dia");
       hi_ao_clicar(hi_item(l, LV_SYMBOL_SETTINGS, p ? COR_AVISO : COR_OK, "Manutenção", m), tela_manutencao); }
     hi_ao_clicar(hi_item(l, LV_SYMBOL_LIST, COR_TEXTO2, "Sobre", "versões, sistema, memória"), tela_sobre);
@@ -181,5 +183,53 @@ lv_obj_t *tela_sobre(void)
     lv_label_set_long_mode(l_sobre, LV_LABEL_LONG_WRAP); lv_obj_set_width(l_sobre, 284);
     lv_obj_set_style_text_line_space(l_sobre, 3, 0);
     hi_set_atualizar(sobre_atualizar);
+    return t;
+}
+
+/* ---------------- ventoinha da peça: velocidade máxima ---------------- */
+static int vt_pct; static lv_obj_t *vt_valor, *vt_slider, *vt_real;
+static void vt_mostrar(void) { char b[32]; snprintf(b, sizeof b, "%d%%", vt_pct); lv_label_set_text(vt_valor, b); lv_slider_set_value(vt_slider, vt_pct, LV_ANIM_OFF); }
+static void ev_vt_slider(lv_event_t *e) { vt_pct = (lv_slider_get_value(lv_event_get_target(e)) + 2) / 5 * 5; vt_mostrar(); }
+static void ev_vt_padrao(lv_event_t *e) { (void)e; vt_pct = 50; vt_mostrar(); hi_toast("Padrão Creality: 50% (ela dividia o valor por 2)", COR_DESTAQUE); }
+static void vt_aplicar_vivo(void) { hi_gcode("SET_GCODE_VARIABLE MACRO=PRINTER_PARAM VARIABLE=fan0_max_pct VALUE=%d", vt_pct); }
+static void ev_vt_testar(lv_event_t *e)
+{
+    (void)e; if (hi_ocupada(&hi_e)) { hi_toast("Indisponível durante a impressão", COR_AVISO); return; }
+    vt_aplicar_vivo(); hi_gcode("M106 S255"); hi_toast("Ventoinha no máximo escolhido (100% pedido)", COR_DESTAQUE);
+}
+static void ev_vt_parar(lv_event_t *e) { (void)e; if (!hi_ocupada(&hi_e)) hi_gcode("M107"); }
+static void ev_vt_salvar(lv_event_t *e)
+{
+    (void)e; char erro[160];
+    if (!hi_cfg_ventoinha_max_gravar(vt_pct, erro, sizeof erro)) { hi_toast(erro, COR_ERRO); return; }
+    vt_aplicar_vivo();
+    char r[48]; snprintf(r, sizeof r, "velocidade máxima %d%%", vt_pct); hi_calib_registrar("Ventoinha da peça", r);
+    hi_toast("Salvo. Já vale para as próximas ordens de ventoinha.", COR_OK); hi_voltar();
+}
+static void vt_atualizar(const hi_estado_t *e) { char b[48]; snprintf(b, sizeof b, "agora: %.0f%% real", e->ventoinha * 100); lv_label_set_text(vt_real, b); }
+lv_obj_t *tela_ventoinha(void)
+{
+    lv_obj_t *t = hi_tela_nova();
+    hi_cabecalho(t, "Ventoinha da peça", true);
+    vt_pct = hi_cfg_ventoinha_max(); if (vt_pct <= 0) vt_pct = 50;
+    lv_obj_t *c = hi_cartao(t, 8, 38, 304, 96);
+    lv_obj_t *n = hi_rotulo(c, "Velocidade máxima real (100% no fatiador)", &hi_font_12, COR_TEXTO2); lv_obj_set_pos(n, 10, 6);
+    vt_valor = hi_rotulo(c, "", &hi_font_28, COR_MESA); lv_obj_set_pos(vt_valor, 10, 24);
+    vt_real = hi_rotulo(c, "", &hi_font_12, COR_TEXTO2); lv_obj_align(vt_real, LV_ALIGN_TOP_RIGHT, -10, 34);
+    vt_slider = lv_slider_create(c); lv_obj_set_size(vt_slider, 270, 12); lv_obj_set_pos(vt_slider, 16, 72);
+    lv_slider_set_range(vt_slider, 20, 100);
+    lv_obj_set_style_bg_color(vt_slider, COR_MESA, LV_PART_INDICATOR); lv_obj_set_style_bg_color(vt_slider, COR_TEXTO, LV_PART_KNOB);
+    lv_obj_add_event_cb(vt_slider, ev_vt_slider, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_t *i = hi_rotulo(t, "Creality: 50% (divide o pedido por 2, mín. 20%).", &hi_font_12, COR_TEXTO2); lv_obj_set_pos(i, 10, 140);
+    lv_obj_t *pd = hi_botao(t, "Padrão Creality", COR_CARTAO2, 120, 36); lv_obj_set_pos(pd, 8, 158);
+    lv_obj_add_event_cb(pd, ev_vt_padrao, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *ts = hi_botao(t, LV_SYMBOL_PLAY " Testar", COR_DESTAQUE, 88, 36); lv_obj_set_pos(ts, 134, 158);
+    lv_obj_add_event_cb(ts, ev_vt_testar, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *pr = hi_botao(t, LV_SYMBOL_STOP " Parar", COR_CARTAO2, 84, 36); lv_obj_set_pos(pr, 228, 158);
+    lv_obj_add_event_cb(pr, ev_vt_parar, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *sv = hi_botao(t, LV_SYMBOL_SAVE "  Salvar", COR_OK, 304, 36); lv_obj_set_pos(sv, 8, 200);
+    lv_obj_add_event_cb(sv, ev_vt_salvar, LV_EVENT_CLICKED, NULL);
+    vt_mostrar();
+    hi_set_atualizar(vt_atualizar);
     return t;
 }

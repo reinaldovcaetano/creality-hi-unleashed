@@ -323,3 +323,26 @@ bool hi_cfg_macros_acel(int nova, char *erro, int tam_erro)
     if (!ok) snprintf(erro, tam_erro, "não consegui gravar as macros (backup em %s)", bak);
     return ok;
 }
+
+int hi_cfg_ventoinha_max(void)
+{
+    char *b = ler(HI_MACROS); if (!b) return -1;
+    char *p = strstr(b, "variable_fan0_max_pct:"); int v = p ? atoi(p + 22) : -1;
+    free(b); return v;
+}
+bool hi_cfg_ventoinha_max_gravar(int pct, char *erro, int tam_erro)
+{
+    char *b = ler(HI_MACROS);
+    if (!b) { snprintf(erro, tam_erro, "não consegui ler o gcode_macro.cfg"); return false; }
+    char *p = strstr(b, "variable_fan0_max_pct:");
+    if (!p) { free(b); snprintf(erro, tam_erro, "as macros não têm a velocidade máxima (atualize o pacote)"); return false; }
+    char bak[256], d[32]; time_t t = time(NULL); strftime(d, sizeof d, "%Y%m%d-%H%M%S", localtime(&t));
+    snprintf(bak, sizeof bak, "%s.hi-painel-%s", HI_MACROS, d);
+    if (!gravar(bak, b)) { free(b); snprintf(erro, tam_erro, "não consegui criar o backup"); return false; }
+    char *fim = p + 22; while (*fim == ' ') fim++; while (*fim >= '0' && *fim <= '9') fim++;
+    size_t n = strlen(b) + 32; char *o = malloc(n);
+    snprintf(o, n, "%.*svariable_fan0_max_pct: %d%s", (int)(p - b), b, pct, fim);
+    bool ok = gravar(HI_MACROS, o); free(o); free(b);
+    if (!ok) snprintf(erro, tam_erro, "não consegui gravar as macros (backup em %s)", bak);
+    return ok;
+}

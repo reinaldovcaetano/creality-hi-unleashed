@@ -9,9 +9,11 @@ hi_estado_t hi_e;
 static hi_atualizar_fn atual;
 
 void hi_set_atualizar(hi_atualizar_fn f) { atual = f; if (f) f(&hi_e); }
+static void reinicio_tique(const hi_estado_t *e);
 void hi_atualizar_agora(void)
 {
     hi_estado_copiar(&hi_e);
+    reinicio_tique(&hi_e);
     if (atual) atual(&hi_e);
 }
 
@@ -202,4 +204,52 @@ void hi_teclado_texto(const char *titulo, const char *inicial, hi_txt_cb cb, voi
     lv_obj_set_style_text_font(kb, &hi_font_14, LV_PART_ITEMS); lv_obj_set_style_border_width(kb, 0, LV_PART_ITEMS);
     lv_obj_add_event_cb(kb, txt_ev, LV_EVENT_READY, t);
     lv_obj_add_event_cb(kb, txt_ev, LV_EVENT_CANCEL, t);
+}
+
+/* ---------------- "Reiniciando o Klipper..." ---------------- */
+static lv_obj_t *re_tela, *re_info; static int re_fase; static double re_inicio; static char re_depois[128], re_motivo[96];
+void hi_reiniciando(const char *motivo, const char *depois)
+{
+    if (re_tela) lv_obj_del(re_tela);
+    re_tela = lv_obj_create(lv_layer_top());
+    lv_obj_remove_style_all(re_tela);
+    lv_obj_set_size(re_tela, HI_W, HI_H);
+    lv_obj_set_style_bg_color(re_tela, COR_FUNDO, 0); lv_obj_set_style_bg_opa(re_tela, LV_OPA_COVER, 0);
+    lv_obj_add_flag(re_tela, LV_OBJ_FLAG_CLICKABLE);                 /* segura os toques enquanto reinicia */
+    lv_obj_t *sp = lv_spinner_create(re_tela, 1000, 60); lv_obj_set_size(sp, 64, 64); lv_obj_align(sp, LV_ALIGN_CENTER, 0, -30);
+    lv_obj_set_style_arc_color(sp, COR_DESTAQUE, LV_PART_INDICATOR); lv_obj_set_style_arc_width(sp, 6, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(sp, COR_CARTAO2, LV_PART_MAIN); lv_obj_set_style_arc_width(sp, 6, LV_PART_MAIN);
+    lv_obj_t *t = hi_rotulo(re_tela, "Reiniciando o Klipper", &hi_font_16, COR_TEXTO); lv_obj_align(t, LV_ALIGN_CENTER, 0, 24);
+    re_info = hi_rotulo(re_tela, motivo ? motivo : "aguarde...", &hi_font_12, COR_TEXTO2);
+    lv_obj_set_style_text_align(re_info, LV_TEXT_ALIGN_CENTER, 0); lv_obj_align(re_info, LV_ALIGN_CENTER, 0, 50);
+    snprintf(re_depois, sizeof re_depois, "%s", depois ? depois : "");
+    snprintf(re_motivo, sizeof re_motivo, "%s", motivo ? motivo : "");
+    re_fase = 0; re_inicio = hi_agora();
+}
+static void re_fechar(void *u) { (void)u; if (re_tela) { lv_obj_del(re_tela); re_tela = NULL; } }
+static void re_ev_fechar(lv_event_t *e) { (void)e; re_fechar(NULL); }
+static void reinicio_tique(const hi_estado_t *e)
+{
+    if (!re_tela) return;
+    double dt = hi_agora() - re_inicio;
+    int pronto = e->conectado && !strcmp(e->klippy, "ready");
+    /* fase 0: espera o Klipper SAIR do "ready" (o comando ainda pode estar na fila); fase 1: espera VOLTAR */
+    if (re_fase == 0 && (!pronto || dt > 12)) re_fase = 1;
+    if (re_fase == 1 && pronto && dt > 2) {
+        re_fechar(NULL);
+        hi_toast(re_depois[0] ? re_depois : LV_SYMBOL_OK "  Klipper pronto", COR_OK);
+        return;
+    }
+    char b[200];
+    if (!strcmp(e->klippy, "shutdown") || !strcmp(e->klippy, "error")) snprintf(b, sizeof b, "Erro ao reiniciar:\n%.120s", e->klippy_msg);
+    else {
+        const char *fase = re_fase == 0 ? "enviando o comando" : !e->conectado ? "aguardando a conexão" : !strcmp(e->klippy, "startup") ? "iniciando o firmware" : "quase pronto";
+        snprintf(b, sizeof b, "%s%s%s  \xE2\x80\xA2  %ds", re_motivo, re_motivo[0] ? "\n" : "", fase, (int)dt);
+    }
+    lv_label_set_text(re_info, b);
+    if (dt > 180 && dt < 1e5) {     /* 3 min sem voltar: oferece fechar (uma vez) */
+        lv_obj_t *b2 = hi_botao(re_tela, "Fechar", COR_CARTAO2, 120, 36); lv_obj_align(b2, LV_ALIGN_BOTTOM_MID, 0, -12);
+        lv_obj_add_event_cb(b2, re_ev_fechar, LV_EVENT_CLICKED, NULL);
+        re_inicio = hi_agora() - 1e6;   /* não cria de novo */
+    }
 }

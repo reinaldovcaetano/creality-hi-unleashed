@@ -33,5 +33,8 @@ bool hi_cfg_autosave(const char *secao, const char *chaves[], const char *valore
 bool hi_cfg_ler_pid(const char *secao, double pid[3]);
 /* troca o teto de aceleração fixo das macros (variable_default_acc, M204 e SET_VELOCITY_LIMIT) com backup */
 bool hi_cfg_macros_acel(int nova, char *erro, int tam_erro);
+/* velocidade máxima da ventoinha da peça (PRINTER_PARAM.fan0_max_pct em gcode_macro.cfg); -1 = macro sem a variável */
+int  hi_cfg_ventoinha_max(void);
+bool hi_cfg_ventoinha_max_gravar(int pct, char *erro, int tam_erro);
 bool hi_cfg_valor(const char *secao, const char *chave, char *dst, int tam);   /* autosave tem prioridade */
 #endif

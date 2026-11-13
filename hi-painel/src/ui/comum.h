@@ -18,6 +18,9 @@ void hi_menu(const char *titulo, const char *texto, const char *opcoes[], const 
 void hi_teclado_texto(const char *titulo, const char *inicial, hi_txt_cb cb, void *ud);
 
 /* a tela atual registra uma função chamada a cada 500 ms com o estado ao vivo (zerada ao trocar de tela) */
+/* tela "Reiniciando o Klipper..." que só sai quando o Klipper volta a ficar pronto (chamar depois de enviar
+ * FIRMWARE_RESTART / SAVE_CONFIG). 'depois' é a mensagem mostrada quando terminar (pode ser NULL). */
+void hi_reiniciando(const char *motivo, const char *depois);
 void hi_set_atualizar(hi_atualizar_fn f);
 void hi_atualizar_agora(void);          /* chamado pelo timer principal */
 extern hi_estado_t hi_e;                /* último estado copiado */

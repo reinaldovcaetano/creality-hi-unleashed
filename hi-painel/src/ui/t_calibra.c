@@ -46,9 +46,9 @@ static bool pode_calibrar(void)
     if (!strcmp(hi_e.ocioso, "Printing")) { hi_toast("A impressora está executando outro comando", COR_AVISO); return false; }
     return true;
 }
-static void interromper(void *u) { (void)u; hi_req("POST", "/printer/emergency_stop"); hi_gcode("FIRMWARE_RESTART"); job.ativo = 0; hi_toast("Interrompido. Reiniciando o Klipper...", COR_ERRO); hi_voltar(); }
+static void interromper(void *u) { (void)u; hi_req("POST", "/printer/emergency_stop"); hi_gcode("FIRMWARE_RESTART"); job.ativo = 0; hi_voltar(); hi_reiniciando("parada de emergência", "Interrompido. Klipper pronto."); }
 static void ev_interromper(lv_event_t *e) { (void)e; hi_confirmar("Interromper?", "Para tudo na hora (parada de emergência) e reinicia o Klipper.", "Interromper", COR_ERRO, interromper, NULL); }
-static void salvar_config(void *u) { hi_gcode("SAVE_CONFIG"); hi_toast("Salvo. O Klipper vai reiniciar.", COR_OK); hi_calib_registrar((const char *)u, "salvo"); hi_voltar(); }
+static void salvar_config(void *u) { hi_gcode("SAVE_CONFIG"); hi_reiniciando("gravando as calibrações (SAVE_CONFIG)", LV_SYMBOL_OK "  Salvo. Klipper pronto."); hi_calib_registrar((const char *)u, "salvo"); hi_voltar(); }
 
 static lv_obj_t *grafico(lv_obj_t *t, int x, int y, int w, int h, int pontos, int ymin, int ymax)
 {
@@ -126,7 +126,7 @@ static void ev_pid_padrao(lv_event_t *e)
 static void pid_iniciar(void *u)
 {
     (void)u; job_iniciar(); pid_fase = 1;
-    if (!hi_pid_mesa) hi_gcode("M106 S255");    /* ventoinha da peça ligada, como na impressão */
+    if (!hi_pid_mesa) hi_gcode("M106 S255");    /* ventoinha da peça no máximo configurado (Ajustes > Ventoinha da peça), como na impressão */
     hi_gcode("PID_CALIBRATE HEATER=%s TARGET=%d", hi_pid_mesa ? "heater_bed" : "extruder", pid_temp);
     pid_desenhar();
 }
@@ -143,7 +143,7 @@ static void pid_salvar_editado(void)
     if (hi_cfg_autosave(hi_pid_mesa ? "heater_bed" : "extruder", k, vals, 3, erro, sizeof erro)) {
         char r[96]; snprintf(r, sizeof r, "Kp %s Ki %s Kd %s (%d" GRAU ")", v[0], v[1], v[2], pid_temp); hi_br(r);
         hi_calib_registrar(hi_pid_mesa ? "PID da mesa" : "PID do bico", r);
-        hi_gcode("FIRMWARE_RESTART"); hi_toast("Valores gravados. O Klipper vai reiniciar.", COR_OK); hi_voltar();
+        hi_gcode("FIRMWARE_RESTART"); hi_voltar(); hi_reiniciando("PID gravado no printer.cfg", LV_SYMBOL_OK "  PID salvo. Klipper pronto.");
     } else hi_toast(erro, COR_ERRO);
 }
 static void pid_salvar(void *u) { (void)u; hi_gcode("TURN_OFF_HEATERS\nM107"); pid_salvar_editado(); }
@@ -153,7 +153,7 @@ static void ev_pid_editar(lv_event_t *e) { int i = (int)(intptr_t)lv_event_get_u
 static void ev_pid_descartar(lv_event_t *e)
 {
     (void)e; hi_gcode("TURN_OFF_HEATERS\nM107\nFIRMWARE_RESTART");   /* reinicia para o resultado não ficar pendente */
-    hi_toast("Descartado (os valores atuais continuam). Reiniciando o Klipper...", COR_AVISO); hi_voltar();
+    hi_voltar(); hi_reiniciando("descartando o resultado", "Descartado. Os valores atuais continuam.");
 }
 
 static void pid_desenhar(void)
@@ -292,7 +292,7 @@ static void sh_aplicar(void *u)
         char r[96] = "";
         for (int ax = 0; ax < 2; ax++) if (n_shp[ax]) { char x[48]; snprintf(x, sizeof x, "%s %s %.1f Hz  ", ax ? "Y" : "X", shp[ax][esc_shp[ax]].nome, shp[ax][esc_shp[ax]].hz); strcat(r, x); }
         hi_calib_registrar("Vibração", hi_br(r));
-        hi_gcode("FIRMWARE_RESTART"); hi_toast("Shaper gravado. O Klipper vai reiniciar.", COR_OK); hi_voltar();
+        hi_gcode("FIRMWARE_RESTART"); hi_voltar(); hi_reiniciando("shaper gravado no printer.cfg", LV_SYMBOL_OK "  Shaper salvo. Klipper pronto.");
     } else hi_toast(n ? erro : "Nada para aplicar", COR_ERRO);
 }
 static void ev_sh_aplicar(lv_event_t *e) { (void)e; hi_confirmar("Aplicar e salvar?", "Grava o shaper escolhido de cada eixo (com backup do printer.cfg) e reinicia o Klipper.", LV_SYMBOL_SAVE "  Salvar", COR_OK, sh_aplicar, NULL); }
@@ -431,7 +431,7 @@ static void op_pendente(int op, void *u)
 {
     (void)u;
     if (op == 0) mh_iniciar(NULL);                                        /* gravar junto */
-    else if (op == 1) { hi_gcode("FIRMWARE_RESTART"); hi_toast("Pendências descartadas. Reiniciando o Klipper; depois toque em Calibrar.", COR_AVISO); }
+    else if (op == 1) { hi_gcode("FIRMWARE_RESTART"); hi_reiniciando("descartando pendências", "Pendências descartadas. Toque em Calibrar."); }
 }
 static void ev_mh_iniciar(lv_event_t *e)
 {
@@ -604,7 +604,7 @@ static void vl_aplicar(void *u)
     char r[96]; snprintf(r, sizeof r, "vel %d mm/s  acel %d mm/s2  canto %.1f", vl_vel, vl_acel, vl_canto); hi_calib_registrar("Velocidade", hi_br(r));
     hi_gcode("SET_VELOCITY_LIMIT VELOCITY=%d ACCEL=%d ACCEL_TO_DECEL=%d SQUARE_CORNER_VELOCITY=%.1f", vl_vel, vl_acel, vl_acel, vl_canto);
     hi_gcode("FIRMWARE_RESTART");
-    hi_toast("Aplicado como padrão. O Klipper vai reiniciar.", COR_OK); hi_voltar();
+    hi_voltar(); hi_reiniciando("velocidade gravada como padrão", LV_SYMBOL_OK "  Velocidade aplicada. Klipper pronto.");
 }
 static void ev_vl_aplicar(lv_event_t *e)
 {
