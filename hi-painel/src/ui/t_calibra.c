@@ -80,7 +80,7 @@ lv_obj_t *tela_calibracoes(void)
     snprintf(m, sizeof m, "variação %.3f mm  \xE2\x80\xA2  %dx%d", hi_e.malha_max - hi_e.malha_min, hi_e.malha_col, hi_e.malha_lin);
     hi_br(a); hi_br(b); hi_br(c); hi_br(m);
     /* "Calibrar tudo" primeiro: quem quer rapidez resolve com um toque */
-    lv_obj_t *tudo = hi_item_grande(l, LV_SYMBOL_REFRESH, COR_DESTAQUE, "Calibrar tudo", "PID, vibração e malha em sequência");
+    lv_obj_t *tudo = hi_item_grande(l, LV_SYMBOL_REFRESH, COR_DESTAQUE, "Calibrar tudo", "home, vibração, PID e malha em sequência");
     lv_obj_set_style_bg_color(tudo, lv_color_mix(COR_DESTAQUE, COR_CARTAO, 70), 0);
     lv_obj_set_style_border_color(tudo, COR_DESTAQUE, 0);
     hi_ao_clicar(tudo, tela_calibrar_tudo);
@@ -629,9 +629,11 @@ lv_obj_t *tela_historico_calib(void)
 }
 
 /* ================= calibrar tudo ================= */
-static int ct_sel[5] = {1, 1, 1, 1, 0}, ct_rodando, ct_etapa;
+/* Ordem definida com o usuário (13/11/2026): home primeiro (G28), depois vibração, PID do bico, PID da mesa
+ * e malha por último (a mesa já está quente do PID). O nivelamento Z separado é opcional (logo após o home). */
+static int ct_sel[5] = {0, 1, 1, 1, 1}, ct_rodando, ct_etapa;   /* etapa -1 = home */
 static lv_obj_t *ct_btn[5], *ct_info;
-static const char *ct_nome[5] = {"PID do bico", "PID da mesa", "Vibração X e Y", "Malha da mesa", "Nivelamento Z"};
+static const char *ct_nome[5] = {"Nível Z", "Vibração", "PID do bico", "PID da mesa", "Malha da mesa"};
 static void ev_ct_sel(lv_event_t *e)
 {
     int i = (int)(intptr_t)lv_event_get_user_data(e); ct_sel[i] = !ct_sel[i];
@@ -639,7 +641,7 @@ static void ev_ct_sel(lv_event_t *e)
 }
 static void ct_proxima(void)
 {
-    while (ct_etapa < 5 && !ct_sel[ct_etapa]) ct_etapa++;
+    while (ct_etapa >= 0 && ct_etapa < 5 && !ct_sel[ct_etapa]) ct_etapa++;
     if (ct_etapa >= 5) {
         ct_rodando = 0; hi_gcode("TURN_OFF_HEATERS\nM107");
         lv_label_set_text(ct_info, "Tudo pronto. Toque em Salvar tudo para gravar\n(SAVE_CONFIG) e reiniciar o Klipper.");
@@ -649,25 +651,27 @@ static void ct_proxima(void)
     int tb = at >= 0 ? f[at].bico : 230, tm = at >= 0 ? f[at].mesa : 60;
     job_iniciar();
     switch (ct_etapa) {
-        case 0: hi_gcode("M106 S255\nPID_CALIBRATE HEATER=extruder TARGET=%d\nM107", tb); break;
-        case 1: hi_gcode("PID_CALIBRATE HEATER=heater_bed TARGET=%d", tm); break;
-        case 2: hi_gcode("G28\nSHAPER_CALIBRATE"); break;
-        case 3: hi_gcode("M190 S%d\nG28\nBED_MESH_CALIBRATE", tm); break;
-        case 4: hi_gcode("G28\nZ_TILT_ADJUST"); break;
+        case -1: hi_gcode("G28"); break;
+        case 0: hi_gcode("Z_TILT_ADJUST"); break;
+        case 1: hi_gcode("SHAPER_CALIBRATE"); break;
+        case 2: hi_gcode("M106 S255\nPID_CALIBRATE HEATER=extruder TARGET=%d\nM107", tb); break;
+        case 3: hi_gcode("PID_CALIBRATE HEATER=heater_bed TARGET=%d", tm); break;
+        case 4: hi_gcode("M190 S%d\nBED_MESH_CALIBRATE", tm); break;
     }
 }
-static void ct_iniciar(void *u) { (void)u; ct_rodando = 1; ct_etapa = 0; ct_proxima(); }
-static void ev_ct_iniciar(lv_event_t *e) { (void)e; if (!pode_calibrar()) return; hi_confirmar("Calibrar tudo?", "Roda as calibrações marcadas em sequência (20 a 40 min). Mesa livre. No fim você decide se salva.", LV_SYMBOL_PLAY "  Iniciar", COR_DESTAQUE, ct_iniciar, NULL); }
+static void ct_iniciar(void *u) { (void)u; ct_rodando = 1; ct_etapa = -1; ct_proxima(); }
+static void ev_ct_iniciar(lv_event_t *e) { (void)e; if (!pode_calibrar()) return; hi_confirmar("Calibrar tudo?", "Home, depois as calibrações marcadas em sequência (20 a 40 min). Mesa livre. No fim você decide se salva.", LV_SYMBOL_PLAY "  Iniciar", COR_DESTAQUE, ct_iniciar, NULL); }
 static void ev_ct_salvar(lv_event_t *e) { (void)e; if (ct_rodando) { hi_toast("Aguarde terminar", COR_AVISO); return; } hi_confirmar("Salvar tudo?", "Grava todos os resultados (SAVE_CONFIG) e reinicia o Klipper.", LV_SYMBOL_SAVE "  Salvar", COR_OK, salvar_config, "Calibrar tudo"); }
 static void ct_atualizar(const hi_estado_t *e)
 {
     if (!ct_rodando) return;
     char b[160]; double dt = hi_agora() - job.inicio;
-    snprintf(b, sizeof b, "Etapa: %s  (%dmin %02ds)\nBico %.0f/%.0f" GRAU "   Mesa %.0f/%.0f" GRAU, ct_nome[ct_etapa], (int)dt / 60, (int)dt % 60, e->bico, e->bico_alvo, e->mesa, e->mesa_alvo);
+    snprintf(b, sizeof b, "Etapa: %s  (%dmin %02ds)\nBico %.0f/%.0f" GRAU "   Mesa %.0f/%.0f" GRAU, ct_etapa < 0 ? "Home (G28)" : ct_nome[ct_etapa],
+             (int)dt / 60, (int)dt % 60, e->bico, e->bico_alvo, e->mesa, e->mesa_alvo);
     lv_label_set_text(ct_info, b);
     if (job_passo(e)) {
         job.ativo = 0;
-        if (job.erro) { ct_rodando = 0; snprintf(b, sizeof b, "Parou em %s:\n%s", ct_nome[ct_etapa], job_erro_txt()); lv_label_set_text(ct_info, b); hi_gcode("TURN_OFF_HEATERS"); return; }
+        if (job.erro) { ct_rodando = 0; snprintf(b, sizeof b, "Parou em %s:\n%s", ct_etapa < 0 ? "Home" : ct_nome[ct_etapa], job_erro_txt()); lv_label_set_text(ct_info, b); hi_gcode("TURN_OFF_HEATERS"); return; }
         ct_etapa++; ct_proxima();
     }
 }
@@ -675,14 +679,18 @@ lv_obj_t *tela_calibrar_tudo(void)
 {
     lv_obj_t *t = hi_tela_nova();
     hi_cabecalho(t, "Calibrar tudo", true);
-    for (int i = 0; i < 5; i++) {
-        ct_btn[i] = hi_botao(t, ct_nome[i], ct_sel[i] ? COR_DESTAQUE : COR_CARTAO2, i < 3 ? 98 : 150, 34);
-        lv_obj_set_pos(ct_btn[i], i < 3 ? 8 + i * 103 : 8 + (i - 3) * 154, i < 3 ? 38 : 76);
+    static const int ordem_tela[5] = {1, 2, 3, 4, 0};     /* na tela, na ordem de execução; Z (opcional) por último */
+    for (int p = 0; p < 5; p++) {
+        int i = ordem_tela[p];
+        char rot[48];
+        if (i) snprintf(rot, sizeof rot, "%d. %s", p + 1, ct_nome[i]); else snprintf(rot, sizeof rot, "%s (opcional)", ct_nome[i]);
+        ct_btn[i] = hi_botao(t, rot, ct_sel[i] ? COR_DESTAQUE : COR_CARTAO2, p < 3 ? 98 : 150, 34);
+        lv_obj_set_pos(ct_btn[i], p < 3 ? 8 + p * 103 : 8 + (p - 3) * 154, p < 3 ? 38 : 76);
         lv_obj_set_style_text_font(lv_obj_get_child(ct_btn[i], 0), &hi_font_12, 0);
         lv_obj_add_event_cb(ct_btn[i], ev_ct_sel, LV_EVENT_CLICKED, (void *)(intptr_t)i);
     }
     lv_obj_t *c = hi_cartao(t, 8, 116, 304, 64);
-    ct_info = hi_rotulo(c, "Marque o que quer calibrar (azul = sim).\nUsa as temperaturas do filamento em uso.", &hi_font_12, COR_TEXTO2); lv_obj_set_pos(ct_info, 10, 8);
+    ct_info = hi_rotulo(c, "Começa com Home (G28). Azul = marcado.\nTemperaturas do filamento em uso.", &hi_font_12, COR_TEXTO2); lv_obj_set_pos(ct_info, 10, 8);
     lv_obj_t *go = hi_botao(t, LV_SYMBOL_PLAY "  Iniciar", COR_DESTAQUE, 148, 44); lv_obj_set_pos(go, 8, 188);
     lv_obj_add_event_cb(go, ev_ct_iniciar, LV_EVENT_CLICKED, NULL);
     lv_obj_t *sv = hi_botao(t, LV_SYMBOL_SAVE "  Salvar tudo", COR_OK, 148, 44); lv_obj_set_pos(sv, 164, 188);

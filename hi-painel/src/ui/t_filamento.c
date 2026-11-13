@@ -22,13 +22,15 @@ static bool livre(void)
     if (strcmp(hi_e.klippy, "ready")) { hi_toast("Klipper não está pronto", COR_ERRO); return false; }
     return true;
 }
-/* sequências baseadas nas macros da própria Creality (EXTRUDE_BEFORE_CLEAR e QUIT_MATERIAL) */
-static void fazer_carregar(void *u) { (void)u; etapa = 1; hi_gcode("M109 S%d\nEXTRUDE_BEFORE_CLEAR", temp_op); }
+/* Ajuste 13/11: carregar usa a MESMA macro da tela original (LOAD_MATERIAL: home se preciso, vai à posição de
+ * descarte, aquece, purga, limpa o bico e volta). Antes usava só EXTRUDE_BEFORE_CLEAR, que extrudava onde o
+ * cabeçote estivesse (o filamento caía na mesa). O pré-aquecimento usa a temperatura do filamento escolhido. */
+static void fazer_carregar(void *u) { (void)u; etapa = 1; hi_gcode("M109 S%d\nLOAD_MATERIAL", temp_op); }
 static void fazer_descarregar(void *u) { (void)u; etapa = 2; hi_gcode("M109 S%d\nQUIT_MATERIAL", temp_op); }
 static void ev_carregar(lv_event_t *e)
 {
     (void)e; if (!livre()) return;
-    char m[200]; snprintf(m, sizeof m, "Aquece o bico a %d" GRAU "C e empurra 60 mm de filamento, depois limpa o bico.\nColoque o filamento no extrusor.", temp_op);
+    char m[200]; snprintf(m, sizeof m, "Vai à posição de descarte, aquece o bico a %d" GRAU "C, purga e limpa o bico (igual à tela original).\nColoque o filamento no extrusor.", temp_op);
     hi_confirmar("Carregar filamento", m, "Carregar", COR_OK, fazer_carregar, NULL);
 }
 static void ev_descarregar(lv_event_t *e)
@@ -42,7 +44,7 @@ static void ev_extrudar(lv_event_t *e)
     int mm = (int)(intptr_t)lv_event_get_user_data(e);
     if (!livre()) return;
     if (hi_e.bico < 170) { hi_toast("Aqueça o bico (mínimo 170\xC2\xB0" "C) antes de mover o filamento", COR_AVISO); return; }
-    hi_gcode("M83\nG1 E%d F%d\nM82", mm, mm > 0 ? 180 : 600);
+    hi_gcode("IF_NEED_HOME\nBOX_GO_TO_EXTRUDE_POS\nM83\nG1 E%d F%d\nM82", mm, mm > 0 ? 180 : 600);   /* na posição de descarte */
 }
 static void set_temp(double v, void *u) { (void)u; temp_op = (int)v; char b[32]; snprintf(b, sizeof b, "%d" GRAU "C", temp_op); lv_label_set_text(l_temp, b); }
 static void ev_temp(lv_event_t *e) { (void)e; hi_teclado_num("Temperatura para carregar/descarregar", temp_op, 170, 300, 0, set_temp, NULL); }
