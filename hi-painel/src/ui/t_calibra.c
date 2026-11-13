@@ -673,7 +673,8 @@ static void ct_proxima(void)
     while (ct_etapa >= 0 && ct_etapa < 5 && !ct_sel[ct_etapa]) ct_etapa++;
     if (ct_etapa >= 5) {
         ct_rodando = 0; hi_gcode("TURN_OFF_HEATERS\nM107");
-        lv_label_set_text(ct_info, "Tudo pronto. Toque em Salvar tudo para gravar\n(SAVE_CONFIG) e reiniciar o Klipper.");
+        lv_label_set_text(ct_info, ct_sel[4] ? "Pronto. A malha já está ativa e gravada.\nToque em Salvar tudo para reiniciar e usar PID/vibração."
+                                             : "Tudo pronto. Toque em Salvar tudo para gravar\n(SAVE_CONFIG) e reiniciar o Klipper.");
         hi_calib_registrar("Calibrar tudo", "concluído"); return;
     }
     hi_fil_t f[HI_MAX_FIL]; int at; hi_fil_carregar(f, HI_MAX_FIL, &at);
