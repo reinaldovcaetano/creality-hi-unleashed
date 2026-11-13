@@ -39,3 +39,9 @@ sensor de pressão (`prtouch_v3`) e o home preciso (`NEXT_HOMEZ_NACCU`).
 - 33 Creality Hi Mods: https://printer-hub.ru/en/posts/creality-hi-best-mods
 - Fórum Creality, faixa da malha na Hi: https://forum.creality.com/t/creality-hi-bed-mesh-range-of-0-572-mm-is-this-normal-for-a-new-printer/52385
 - PID no Klipper: https://3dprintbeginner.com/hotend-and-heatbed-pid-tuning-in-klipper/
+
+## Desempenho (13/11/2026)
+
+- O Klipper da Creality grava no `klippy.log` duas linhas por requisição, inclusive consultas de estado: com uma tela consultando a cada segundo, ~250 MB/dia no eMMC. `scripts/webhooks_menos_log.py` tira do log só as consultas de leitura (`objects/query`, `objects/list`, `info`); o arquivo corrigido vai no overlay do pacote. Resultado medido: ~40 MB/dia.
+- O Hi Painel consulta a cada 0,7 s só quando está na frente; com a tela da Creality ou em descanso, a cada 4 s. A matriz da malha vem a cada 10 consultas.
+- Medido parado: CPU ~22% ocupada (2 núcleos a 1,2 GHz), ~378 MB de RAM livres de 500, 38 °C.

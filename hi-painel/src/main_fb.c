@@ -264,6 +264,7 @@ int main(int argc, char **argv)
     uint32_t ant = agora_ms(), inicio_toque = 0;
     while (!sinal_sair) {
         uint32_t t = agora_ms(); lv_tick_inc(t - ant); ant = t;
+        hi_poll_lento = !ativo || dormindo;
         if (ativo) {
             lv_timer_handler();
             if (pedir_saida) { pedir_saida = 0; fechar(); if (!modo_espera) break; }

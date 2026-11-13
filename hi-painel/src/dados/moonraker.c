@@ -164,8 +164,12 @@ static void ler_rede(hi_estado_t *e)
 
 static const char *CONSULTA =
     "/printer/objects/query?webhooks&print_stats&extruder&heater_bed&toolhead&gcode_move&virtual_sdcard"
-    "&display_status&output_pin%20LED&output_pin%20fan0&system_stats&bed_mesh=profile_name,probed_matrix"
+    "&display_status&output_pin%20LED&output_pin%20fan0&system_stats"
     "&temperature_sensor%20mcu_temp&idle_timeout&filament_switch_sensor%20filament_sensor&configfile=save_config_pending";
+/* Ajuste 13/11 (desempenho): a matriz da malha (49-81 números) só a cada 10 ciclos; com a tela da Creality na frente
+ * ou em descanso, consulta a cada 4 s em vez de 0,7 s (menos CPU no Klipper/Moonraker e menos log). */
+static const char *CONSULTA_MALHA = "&bed_mesh=profile_name,probed_matrix";
+volatile int hi_poll_lento;
 
 static void *thread_poll(void *x)
 {
@@ -175,7 +179,9 @@ static void *thread_poll(void *x)
         hi_estado_t e;
         pthread_mutex_lock(&mx); e = est; pthread_mutex_unlock(&mx);
         int st = 0;
-        char *r = http("GET", CONSULTA, NULL, &st, 3);
+        int com_malha = !hi_poll_lento && (ciclo % 10 == 0);
+        char q[640]; snprintf(q, sizeof q, "%s%s", CONSULTA, com_malha ? CONSULTA_MALHA : "");
+        char *r = http("GET", q, NULL, &st, 3);
         e.conectado = r && st == 200;
         if (!r) snprintf(e.klippy, sizeof e.klippy, "offline");
         else if (st != 200) snprintf(e.klippy, sizeof e.klippy, "startup");
@@ -220,6 +226,7 @@ static void *thread_poll(void *x)
             if ((o = cJSON_GetObjectItem(s, "bed_mesh"))) {
                 str(o, "profile_name", e.malha_perfil, sizeof e.malha_perfil);
                 cJSON *m = cJSON_GetObjectItem(o, "probed_matrix");
+                if (m) {
                 int nl = cJSON_GetArraySize(m); if (nl > HI_MAX_MALHA) nl = HI_MAX_MALHA;
                 e.malha_lin = nl; e.malha_col = 0; e.malha_min = 1e9; e.malha_max = -1e9;
                 for (int i = 0; i < nl; i++) {
@@ -232,6 +239,7 @@ static void *thread_poll(void *x)
                     }
                 }
                 if (!nl) e.malha_min = e.malha_max = 0;
+                }
             }
             cJSON_Delete(j);
         }
@@ -240,7 +248,8 @@ static void *thread_poll(void *x)
         e.versao++;
         pthread_mutex_lock(&mx); est = e; pthread_mutex_unlock(&mx);
         ciclo++;
-        usleep(700000);
+        if (hi_poll_lento) { for (int k = 0; k < 20 && hi_poll_lento; k++) usleep(200000); }   /* até 4 s, acorda rápido ao abrir */
+        else usleep(700000);
     }
     return NULL;
 }

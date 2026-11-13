@@ -50,6 +50,7 @@ typedef struct {
 } hi_estado_t;
 
 void hi_dados_iniciar(void);
+extern volatile int hi_poll_lento;   /* 1 = tela da Creality na frente / descanso: consulta a cada 4 s */
 void hi_estado_copiar(hi_estado_t *dst);
 
 /* comandos (assíncronos, em fila) */
