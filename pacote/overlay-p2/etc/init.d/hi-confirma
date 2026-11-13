@@ -1,0 +1,94 @@
+#!/bin/sh /etc/rc.common
+# Projeto Hi (pacote 2): confirma a instalação feita por "tentativa única".
+# O pacote não troca a metade oficial: o U-Boot inicia a metade nova UMA vez (bootcmd=run hi_tenta, que já
+# devolveu o bootcmd normal e gravou o env antes). Aqui, se tudo estiver bem, a metade nova vira a oficial.
+# Se algo falhar, reinicia e o U-Boot volta para a metade antiga, que continua oficial.
+START=99
+
+start() { ( confirmar ) </dev/null >/dev/null 2>&1 & }
+
+ok_klipper() {
+    /usr/share/moonraker-env/bin/python - <<'PY' 2>/dev/null
+import json, urllib.request, sys
+try:
+    r = json.load(urllib.request.urlopen("http://127.0.0.1:7125/printer/info", timeout=5))
+    sys.exit(0 if r["result"]["state"] == "ready" else 1)
+except Exception:
+    sys.exit(1)
+PY
+}
+
+# Ajuste 13/11: o 1º pacote 2 tinha o Klipper "ready" por alguns segundos e caiu aos 61 s na 1ª leitura da
+# EEPROM (bl24c16f, I2C). Agora a EEPROM é exercitada de propósito pelo próprio Klipper (via Moonraker).
+ok_eeprom() {
+    /usr/share/moonraker-env/bin/python - <<'PY' 2>/dev/null
+import json, urllib.request, urllib.parse, sys
+try:
+    for g in ("EEPROM_IS_FIRST_USED", "EEPROM_POS"):
+        q = urllib.parse.urlencode({"script": g})
+        r = json.load(urllib.request.urlopen(urllib.request.Request(
+            "http://127.0.0.1:7125/printer/gcode/script?" + q, method="POST"), timeout=20))
+        if r.get("result") != "ok": sys.exit(1)
+    r = json.load(urllib.request.urlopen("http://127.0.0.1:7125/printer/info", timeout=5))
+    sys.exit(0 if r["result"]["state"] == "ready" else 1)
+except Exception:
+    sys.exit(1)
+PY
+}
+
+confirmar() {
+    LOG=/tmp/hi-confirma.log
+    P=$(sed -n 's/.*root=\/dev\/mmcblk0p\([0-9]*\).*/\1/p' /proc/cmdline)
+    case "$P" in 6) S=A ;; 7) S=B ;; *) echo "metade desconhecida ($P)" >> $LOG; return ;; esac
+    # Ajuste 13/11: no 1c o fw_printenv voltou vazio no boot ("oficial: "). Agora lê com novas tentativas e
+    # só age se o env foi lido E o hi_tenta existe; sem isso nunca reinicia (evita loop num boot normal).
+    OFICIAL=""; TENTA=""; i=0
+    while [ $i -lt 30 ]; do
+        OFICIAL=$(fw_printenv -n boot_partition 2>/dev/null)
+        TENTA=$(fw_printenv -n hi_tenta 2>/dev/null)
+        [ -n "$OFICIAL" ] && break
+        [ $i -eq 0 ] && { echo "== $(date) fw_printenv vazio, erro:"; fw_printenv boot_partition 2>&1; ls -l /dev/by-name/env /var/lock 2>&1 | head -3; } >> $LOG
+        sleep 2; i=$((i+1))
+    done
+    [ -n "$OFICIAL" ] || { echo "== $(date) env ilegível, nada feito" >> $LOG; cp $LOG /mnt/UDISK/printer_data/logs/ 2>/dev/null; return; }
+    [ "$OFICIAL" = "boot$S" ] && { [ -n "$TENTA" ] && fw_setenv hi_tenta; return; }
+    [ -n "$TENTA" ] || { echo "== $(date) metade $S sem tentativa pendente (oficial: $OFICIAL), nada feito" >> $LOG; return; }
+    echo "== $(date) tentativa na metade $S (oficial: $OFICIAL)" >> $LOG
+    # Ajuste 13/11: janela de 7 min; só conta depois de 90 s de boot; exige Klipper "ready" SEM interrupção
+    # por 60 s (12 checagens seguidas: qualquer queda zera a contagem) e a EEPROM lida pelo Klipper no meio.
+    n=0; OK=0; EE=0
+    while [ $n -lt 84 ]; do                       # até 7 min
+        sleep 5; n=$((n+1))
+        [ "$(cut -d. -f1 /proc/uptime)" -ge 90 ] || continue
+        pidof display-server >/dev/null || continue
+        [ -e /dev/fb0 ] || continue
+        grep -q -E "^(tlsc6x|gt9xxnew_ts) " /proc/modules || continue
+        # touch respondendo pelo I2C (registrou dispositivo de entrada: gt9xxnew_ts/goodix ou tlsc6x)
+        grep -q -E "^N: Name=\"(gt9xxnew_ts|tlsc6x)" /proc/bus/input/devices || continue
+        # porta USB-A (usbc0) em modo host: controlador ehci0 registrado (pendrive/dongle)
+        ls -l /sys/bus/usb/devices/ 2>/dev/null | grep -q "4101000.ehci0" || continue
+        ok_klipper || { OK=0; continue; }
+        OK=$((OK+1))
+        [ $OK -eq 6 ] && { ok_eeprom && EE=1 || { EE=0; OK=0; echo "$(date) EEPROM/Klipper falhou no teste" >> $LOG; }; }
+        [ $OK -ge 12 ] && [ $EE = 1 ] && break     # 60 s seguidos + EEPROM ok
+    done
+    {
+        echo "tela: $(pidof display-server) fb0: $(ls /dev/fb0 2>&1) touch: $(grep -o -E '^(tlsc6x|gt9xxnew_ts)' /proc/modules) usbA-host: $(ls -l /sys/bus/usb/devices/ | grep -c 4101000.ehci0) touch-input: $(grep -c -E 'gt9xxnew_ts|tlsc6x' /proc/bus/input/devices)"
+        echo "klipper ok: $OK (de 12)  eeprom: $EE  uptime: $(cut -d. -f1 /proc/uptime) s"
+        echo "i2c novas tentativas: $(dmesg | grep -c 'hi: nova tentativa')  recuperadas: $(dmesg | grep -c 'hi: recuperado')  ACK não recebido: $(dmesg | grep -c 'ACK not')"
+        dmesg | grep -E "hi: (nova|recuperado)|ACK not|xfer failed" | tail -6
+        # Ajuste 13/11: no kernel próprio o PG9 (SDA do i2c.1/EEPROM) ficava sem função (erro na tabela de pinos do BSP)
+        echo "pinos i2c.1: $(grep -E 'PG[89]\)' /sys/kernel/debug/pinctrl/pio/pinmux-pins 2>/dev/null | sed 's/.*(\(PG[0-9]\)): /\1=/' | tr '\n' ' ')"
+        cat /tmp/hi-wifi.log 2>/dev/null | tail -8
+    } >> $LOG
+    if [ $OK -ge 12 ] && [ $EE = 1 ]; then
+        fw_setenv boot_partition boot$S && fw_setenv root_partition rootfs$S && \
+        fw_setenv version "$(cat /etc/hi-versao-ota)" && fw_setenv hi_tenta && \
+        echo "CONFIRMADO: metade $S agora é a oficial" >> $LOG
+    else
+        echo "FALHOU: voltando para $OFICIAL" >> $LOG
+        mkdir -p /mnt/UDISK/printer_data/logs; cp $LOG /mnt/UDISK/printer_data/logs/hi-confirma-falhou.log; sync
+        reboot
+    fi
+    mkdir -p /mnt/UDISK/printer_data/logs; cp $LOG /tmp/hi-wifi.log /mnt/UDISK/printer_data/logs/ 2>/dev/null; sync
+}

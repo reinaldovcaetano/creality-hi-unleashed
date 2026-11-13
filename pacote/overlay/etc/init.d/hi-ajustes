@@ -1,0 +1,68 @@
+#!/bin/sh /etc/rc.common
+# Projeto Hi: roda antes do Klipper (S55), uma vez por versão do nosso pacote.
+# - macros/configs: instala as nossas (com backup) na 1a inicialização de cada versão;
+# - printer.cfg: se não tiver calibração (SAVE_CONFIG), monta nosso de fábrica + calibração salva.
+#   Se já tiver calibração, o próprio init da Creality troca o corpo (Version v1.0.80) e mantém a calibração.
+START=54
+
+start() {
+    # em segundo plano: o UDISK é montado tarde pela Creality (não travar o boot nem gravar sob o ponto de montagem)
+    ( aplicar ) </dev/null >/dev/null 2>&1 &
+}
+
+aplicar() {
+    n=0; while ! grep -q " /mnt/UDISK " /proc/mounts && [ $n -lt 180 ]; do sleep 1; n=$((n+1)); done
+    grep -q " /mnt/UDISK " /proc/mounts || return 0
+    MUDOU=0
+    CFG=/mnt/UDISK/printer_data/config
+    ROM=/usr/share/klipper/config/F018_CR4NU200360C20
+    BKP=/usr/share/hi/save_config.txt   # opcional (pacote/local/save_config.txt no build)
+    LOG=/mnt/UDISK/printer_data/logs/hi-ajustes.log
+    VER=$(cat /etc/hi-versao-ota 2>/dev/null)
+    MARCA="$CFG/.hi-aplicado-$VER"
+    mkdir -p "$CFG" /mnt/UDISK/printer_data/logs
+    {
+        echo "== $(date) $(cat /etc/hi-versao 2>/dev/null)"
+        if [ -f "$MARCA" ]; then
+            echo "versão já aplicada antes: só confiro o que falta"
+        else
+            B="$CFG/backup-antes-hi-$(date +%Y%m%d-%H%M%S)"
+            mkdir -p "$B"
+            cp -f "$CFG"/*.cfg "$B"/ 2>/dev/null
+            # Ajuste 13/11 (versão completa): só troca o arquivo se ele faltar ou for de FÁBRICA da Creality
+            # (MD5 das versões .50/.74/GitHub em fabrica.md5). Arquivo já ajustado (nosso ou do usuário) fica.
+            for f in gcode_macro.cfg sensorless.cfg box.cfg motor_control.cfg printer_params.cfg; do
+                if [ ! -s "$CFG/$f" ]; then
+                    cp -f "$ROM/$f" "$CFG/$f" && MUDOU=1 && echo "instalado $f (não existia)"
+                elif cmp -s "$ROM/$f" "$CFG/$f"; then
+                    echo "$f já é o do pacote"
+                elif grep -q "^$(md5sum "$CFG/$f" | cut -d' ' -f1)  $f\$" /usr/share/hi/fabrica.md5 2>/dev/null; then
+                    cp -f "$ROM/$f" "$CFG/$f" && MUDOU=1 && echo "instalado $f (era o de fábrica; backup em $B)"
+                else
+                    echo "$f ajustado à mão: mantido (o do pacote fica em $ROM/$f)"
+                fi
+            done
+        fi
+        if [ -s "$CFG/printer.cfg" ] && grep -q "SAVE_CONFIG" "$CFG/printer.cfg"; then
+            echo "printer.cfg já tem calibração: mantida (o init da Creality aplica o corpo v1.0.80)"
+        else
+            [ -f "$CFG/printer.cfg" ] && cp -f "$CFG/printer.cfg" "$CFG/printer.cfg.antes-hi-ajustes"
+            cp -f "$ROM/printer.cfg" "$CFG/printer.cfg"
+            if [ -f "$BKP" ]; then
+                echo "" >> "$CFG/printer.cfg"; cat "$BKP" >> "$CFG/printer.cfg"
+                echo "printer.cfg montado: fábrica Hi + calibração salva ($BKP)"
+            else
+                echo "printer.cfg de fábrica Hi instalado (sem calibração salva: a autoverificação da Hi calibra)"
+            fi
+            MUDOU=1
+        fi
+        [ -s "$CFG/factory_printer.cfg" ] || cp -f "$ROM/factory_printer.cfg" "$CFG/factory_printer.cfg"
+        touch "$MARCA"
+        sync
+        # se o Klipper já subiu com as configs antigas, reinicia para pegar as novas
+        if [ "$MUDOU" = 1 ] && pidof python >/dev/null 2>&1 && [ -S /tmp/klippy_uds ]; then
+            echo "configs mudaram depois do Klipper subir: reiniciando o Klipper"
+            /etc/init.d/klipper restart
+        fi
+    } >> "$LOG" 2>&1
+}

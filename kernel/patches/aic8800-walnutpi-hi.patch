@@ -1,0 +1,142 @@
+diff -ruN -x '*.mod.c' -x .gitignore -x '*.o' -x '*.ko' -x '*.cmd' a/Kbuild b/Kbuild
+--- a/Kbuild	1970-01-01 00:00:00.000000000 +0000
++++ b/Kbuild	2026-11-13 12:28:53.665656543 +0000
+@@ -0,0 +1,3 @@
++B := $(BACKPORTS)
++NOSTDINC_FLAGS += -I$(B)/backport-include/ -I$(B)/backport-include/uapi -I$(B)/include/ -I$(B)/include/uapi -include $(B)/backport-include/backport/backport.h -DCPTCFG_VERSION=\"v6.1.145\" -DCPTCFG_KERNEL_VERSION=\"v6.1.145\" -DCPTCFG_KERNEL_NAME=\"Linux\"
++obj-m += aic8800_bsp/ aic8800_fdrv/
+diff -ruN -x '*.mod.c' -x .gitignore -x '*.o' -x '*.ko' -x '*.cmd' a/aic8800_fdrv/rwnx_compat.h b/aic8800_fdrv/rwnx_compat.h
+--- a/aic8800_fdrv/rwnx_compat.h	2026-04-30 08:00:28.000000000 +0000
++++ b/aic8800_fdrv/rwnx_compat.h	2026-11-13 12:28:53.659853926 +0000
+@@ -51,8 +51,19 @@
+ #define HIGH_KERNEL_VERSION4 KERNEL_VERSION(6, 3, 0)
+ #endif
+ 
++/* Projeto Hi: kernel 5.4 + cfg80211/mac80211 do backports 6.1 */
++#undef HIGH_KERNEL_VERSION
++#undef HIGH_KERNEL_VERSION2
++#undef HIGH_KERNEL_VERSION3
++#undef HIGH_KERNEL_VERSION4
++#define HIGH_KERNEL_VERSION KERNEL_VERSION(0, 0, 1)
++#define HIGH_KERNEL_VERSION2 KERNEL_VERSION(0, 0, 1)
++#define HIGH_KERNEL_VERSION3 KERNEL_VERSION(255, 0, 0)
++#define HIGH_KERNEL_VERSION4 KERNEL_VERSION(255, 0, 0)
+ 
+-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 60)
++
++
++#if 1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */
+ #define IEEE80211_MAX_AMPDU_BUF                             IEEE80211_MAX_AMPDU_BUF_HE
+ #define IEEE80211_HE_PHY_CAP6_TRIG_MU_BEAMFORMER_FB         IEEE80211_HE_PHY_CAP6_TRIG_MU_BEAMFORMING_PARTIAL_BW_FB
+ #define IEEE80211_HE_PHY_CAP6_TRIG_SU_BEAMFORMER_FB         IEEE80211_HE_PHY_CAP6_TRIG_SU_BEAMFORMING_FB
+diff -ruN -x '*.mod.c' -x .gitignore -x '*.o' -x '*.ko' -x '*.cmd' a/aic8800_fdrv/rwnx_gki.c b/aic8800_fdrv/rwnx_gki.c
+--- a/aic8800_fdrv/rwnx_gki.c	2026-04-30 08:00:28.000000000 +0000
++++ b/aic8800_fdrv/rwnx_gki.c	2026-11-13 12:28:53.661966020 +0000
+@@ -237,7 +237,7 @@
+ void rwnx_cfg80211_ch_switch_started_notify(struct net_device *dev,
+ 				struct cfg80211_chan_def *chandef,
+ 				u8 count
+-	#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
++	#if 1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */
+ 				, bool quiet
+ 	#endif
+ 				)
+diff -ruN -x '*.mod.c' -x .gitignore -x '*.o' -x '*.ko' -x '*.cmd' a/aic8800_fdrv/rwnx_gki.h b/aic8800_fdrv/rwnx_gki.h
+--- a/aic8800_fdrv/rwnx_gki.h	2026-04-30 08:00:28.000000000 +0000
++++ b/aic8800_fdrv/rwnx_gki.h	2026-11-13 12:28:53.524986394 +0000
+@@ -35,7 +35,7 @@
+ void rwnx_cfg80211_ch_switch_started_notify(struct net_device *dev,
+ 				struct cfg80211_chan_def *chandef,
+ 				u8 count
+-			#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
++			#if 1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */
+ 				, bool quiet
+ 			#endif
+ 				);
+diff -ruN -x '*.mod.c' -x .gitignore -x '*.o' -x '*.ko' -x '*.cmd' a/aic8800_fdrv/rwnx_main.c b/aic8800_fdrv/rwnx_main.c
+--- a/aic8800_fdrv/rwnx_main.c	2026-04-30 08:00:28.000000000 +0000
++++ b/aic8800_fdrv/rwnx_main.c	2026-11-13 12:28:53.617037314 +0000
+@@ -770,7 +770,7 @@
+ 		cfg80211_disconnected(vif->ndev, 0, NULL, 0, 0, GFP_KERNEL);
+ 		#endif
+ 	} else {
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0))
++#if (1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */)
+ 		wiphy_lock(rwnx_hw->wiphy);
+ #else
+ 		mutex_lock(&vif->wdev.mtx);
+@@ -792,7 +792,7 @@
+ #else
+ 		cfg80211_ch_switch_notify(vif->ndev, &csa->chandef);
+ #endif
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0))
++#if (1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */)
+ 		wiphy_unlock(rwnx_hw->wiphy);
+ #else
+ 		mutex_unlock(&vif->wdev.mtx);
+@@ -1644,7 +1644,7 @@
+ 	} else
+ 		vif->use_4addr = false;
+ 
+-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
++#if 1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */
+         if (cfg80211_register_netdevice(ndev))
+ #else
+         if (register_netdevice(ndev))
+@@ -1917,7 +1917,7 @@
+ 
+ 	if (dev->reg_state == NETREG_REGISTERED) {
+         /* Will call rwnx_close if interface is UP */
+-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
++#if 1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */
+         cfg80211_unregister_netdevice(dev);
+ #else
+         unregister_netdevice(dev);
+diff -ruN -x '*.mod.c' -x .gitignore -x '*.o' -x '*.ko' -x '*.cmd' a/aic8800_fdrv/rwnx_mod_params.c b/aic8800_fdrv/rwnx_mod_params.c
+--- a/aic8800_fdrv/rwnx_mod_params.c	2026-04-30 08:00:28.000000000 +0000
++++ b/aic8800_fdrv/rwnx_mod_params.c	2026-11-13 12:28:53.547712297 +0000
+@@ -1314,7 +1314,7 @@
+ 	if (rwnx_hw->mod_params->stbc_on)
+ 		he_cap->he_cap_elem.phy_cap_info[2] |= IEEE80211_HE_PHY_CAP2_STBC_RX_UNDER_80MHZ;
+ 	
+-	#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
++	#if 1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */
+ 	he_cap->he_cap_elem.phy_cap_info[3] |= IEEE80211_HE_PHY_CAP3_DCM_MAX_CONST_RX_16_QAM |
+ 		IEEE80211_HE_PHY_CAP3_DCM_MAX_RX_NSS_1 |
+ 		IEEE80211_HE_PHY_CAP3_RX_PARTIAL_BW_SU_IN_20MHZ_MU;
+@@ -1332,7 +1332,7 @@
+ 	}
+ 	he_cap->he_cap_elem.phy_cap_info[5] |= IEEE80211_HE_PHY_CAP5_NG16_SU_FEEDBACK |
+ 										   IEEE80211_HE_PHY_CAP5_NG16_MU_FEEDBACK;
+-	#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
++	#if 1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */
+ 	he_cap->he_cap_elem.phy_cap_info[6] |= IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_42_SU |
+ 					IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_75_MU |
+ 					IEEE80211_HE_PHY_CAP6_TRIG_SU_BEAMFORMING_FB |
+@@ -1431,7 +1431,7 @@
+ 		#endif
+ 		if (rwnx_hw->mod_params->stbc_on)
+ 			he_cap->he_cap_elem.phy_cap_info[2] |= IEEE80211_HE_PHY_CAP2_STBC_RX_UNDER_80MHZ;
+-		#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
++		#if 1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */
+ 			he_cap->he_cap_elem.phy_cap_info[3] |= IEEE80211_HE_PHY_CAP3_DCM_MAX_CONST_RX_16_QAM |
+ 				IEEE80211_HE_PHY_CAP3_DCM_MAX_RX_NSS_1 |
+ 				IEEE80211_HE_PHY_CAP3_RX_PARTIAL_BW_SU_IN_20MHZ_MU;
+@@ -1448,7 +1448,7 @@
+ 		}
+ 		he_cap->he_cap_elem.phy_cap_info[5] |= IEEE80211_HE_PHY_CAP5_NG16_SU_FEEDBACK |
+ 											   IEEE80211_HE_PHY_CAP5_NG16_MU_FEEDBACK;
+-		#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
++		#if 1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */
+ 			he_cap->he_cap_elem.phy_cap_info[6] |= IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_42_SU |
+ 				IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_75_MU |
+ 				IEEE80211_HE_PHY_CAP6_TRIG_SU_BEAMFORMING_FB |
+@@ -1734,7 +1734,7 @@
+     wiphy->regulatory_flags |= REGULATORY_WIPHY_SELF_MANAGED;
+ 
+     rtnl_lock();
+-	#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
++	#if 1 /* Projeto Hi: API do Wi-Fi vem do backports 6.1 */
+ 		if (regulatory_set_wiphy_regd_sync(wiphy, getRegdomainFromRwnxDB(wiphy, default_ccode))){
+ 			wiphy_err(wiphy, "Failed to set custom regdomain\n");
+ 		}

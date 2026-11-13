@@ -1,0 +1,17 @@
+#!/bin/sh
+# Projeto Hi: adaptador de rede USB (ex.: RTL8153) pega IP sozinho por DHCP.
+case "$INTERFACE" in
+    wlan*|lo|sit*|ip6tnl*|p2p*) exit 0 ;;
+esac
+[ -d "/sys/class/net/$INTERFACE/device" ] || exit 0
+# só interfaces USB
+readlink -f "/sys/class/net/$INTERFACE/device" | grep -q usb || exit 0
+case "$ACTION" in
+    add)
+        ip link set "$INTERFACE" up
+        start-stop-daemon -S -b -x /sbin/udhcpc -- -i "$INTERFACE" -R -S -s /usr/share/udhcpc/default.script -p "/var/run/udhcpc-$INTERFACE.pid" -x hostname:CrealityHi
+        ;;
+    remove)
+        [ -f "/var/run/udhcpc-$INTERFACE.pid" ] && kill "$(cat /var/run/udhcpc-$INTERFACE.pid)" 2>/dev/null
+        ;;
+esac

@@ -1,0 +1,44 @@
+#!/bin/sh /etc/rc.common
+# Projeto Hi (pacote 2): Wi-Fi com a pilha do backports 6.1.
+# O dongle MediaTek MT7921AU (USB) sobe primeiro e vira wlan0, que a tela/wifi-server da Creality já usa (5 GHz).
+# O AIC8800DC interno (SDIO, só 2,4 GHz) sobe depois: vira wlan1 se houver dongle, ou wlan0 se não houver.
+START=19
+M=/lib/modules/5.4.61
+
+start() {
+    L=/tmp/hi-wifi.log
+    {
+        echo "== $(date)"
+        for m in compat cfg80211 libaes aes_generic gf128mul ctr ghash-generic gcm ccm cmac seqiv mac80211 \
+                 mt76 mt76-usb mt76-connac-lib mt7921-common mt7921u; do
+            mm=$(echo $m | tr - _); grep -q "^$mm " /proc/modules || insmod $M/$m.ko 2>&1 | sed "s/^/$m: /"
+        done
+        # espera até 6 s o dongle registrar uma interface (se estiver plugado)
+        n=0; while [ $n -lt 12 ]; do
+            for i in /sys/class/net/wlan*; do readlink -f $i/device 2>/dev/null | grep -q usb && { echo "dongle: $(basename $i)"; n=99; }; done
+            [ $n -lt 99 ] && { sleep 0.5; n=$((n+1)); }
+        done
+        insmod $M/aic8800_bsp.ko 2>&1; insmod $M/aic8800_fdrv.ko 2>&1
+        sleep 2
+        # Com dongle: ele vira wlan0 com o MESMO MAC do Wi-Fi interno, para o roteador manter o IP da Hi
+        # (fatiador, painéis e SSH continuam apontando para o mesmo IP). O interno (wlan1, sem conexão) recebe
+        # o mesmo MAC com o bit "localmente administrado" ligado, para não haver dois iguais na rede.
+        DONGLE=""; INTERNO=""
+        for i in /sys/class/net/wlan*; do
+            [ -e "$i" ] || continue
+            if readlink -f $i/device | grep -q usb; then DONGLE=$(basename $i); else INTERNO=$(basename $i); fi
+        done
+        echo "dongle=$DONGLE interno=$INTERNO"
+        if [ -n "$DONGLE" ] && [ -n "$INTERNO" ]; then
+            MAC=$(cat /sys/class/net/$INTERNO/address)
+            P1=$(echo $MAC | cut -d: -f1); RESTO=$(echo $MAC | cut -d: -f2-)
+            LOCAL=$(printf "%02x" $(( 0x$P1 | 0x02 ))):$RESTO
+            ip link set $INTERNO down; ip link set $DONGLE down
+            ip link set $INTERNO address $LOCAL 2>&1 || echo "aviso: o interno não aceitou trocar o MAC (fica desligado, sem conexão)"
+            ip link set $DONGLE address $MAC 2>&1 && echo "MAC: $DONGLE=$MAC (o do interno, mantém o IP)  $INTERNO=$(cat /sys/class/net/$INTERNO/address)"
+        fi
+        iw reg set BR 2>&1
+        ip -br link | grep wlan
+        iw dev 2>&1 | grep -E "Interface|type"
+    } >> $L 2>&1
+}

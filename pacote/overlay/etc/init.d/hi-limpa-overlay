@@ -1,0 +1,41 @@
+#!/bin/sh /etc/rc.common
+# Projeto Hi: limpa a camada gravável (/overlay/upper) das cópias antigas dos arquivos que o NOSSO pacote traz.
+# Motivo (13/11/2026): a camada gravável sobrevive à atualização; uma correção feita ao vivo em
+# /etc/init.d/hi-confirma ficou POR CIMA da versão nova do pacote. Aqui, uma vez por versão, qualquer arquivo
+# (ou "whiteout" de remoção) do overlay que esconda um arquivo do pacote é removido, com backup no UDISK.
+# Não mexe em configurações do usuário (/etc/config, Wi-Fi, chaves do dropbear, hostname).
+START=11
+
+start() {
+    U=/overlay/upper
+    L=/usr/share/hi/arquivos-do-pacote.txt
+    VER=$(cat /etc/hi-versao-ota 2>/dev/null)
+    MARCA=$U/etc/.hi-overlay-limpo-$VER
+    [ -d "$U" ] && [ -f "$L" ] || return 0
+    [ -e "$MARCA" ] && return 0
+    LOG=/tmp/hi-limpa-overlay.log; : > $LOG
+    LISTA=/tmp/hi-limpa-overlay.lista; : > $LISTA
+    while read -r p; do
+        case "$p" in
+            etc/config/*|etc/wifi/*|etc/dropbear/dropbear_*|etc/hostname|etc/board.json|etc/uci-defaults/*|etc/shadow|etc/passwd) continue ;;
+        esac
+        # arquivo, link ou whiteout (dispositivo de caractere 0,0) escondendo o do pacote
+        if [ -f "$U/$p" ] || [ -L "$U/$p" ] || [ -c "$U/$p" ]; then echo "$p" >> $LISTA; fi
+    done < "$L"
+    if [ -s $LISTA ]; then
+        (cd $U && tar czf /tmp/hi-overlay-sobras-$VER.tgz $(cat $LISTA) 2>/dev/null)
+        while read -r p; do rm -f "$U/$p" && echo "removido do overlay: $p" >> $LOG; done < $LISTA
+        sync; echo 3 > /proc/sys/vm/drop_caches
+    else
+        echo "nada a limpar" >> $LOG
+    fi
+    touch "$MARCA"; sync
+    # o UDISK monta tarde: guarda o log e o backup lá em segundo plano
+    (
+        n=0; while ! grep -q " /mnt/UDISK " /proc/mounts && [ $n -lt 180 ]; do sleep 1; n=$((n+1)); done
+        D=/mnt/UDISK/printer_data/logs; mkdir -p $D
+        { echo "== $(date) versão $VER"; cat $LOG; } >> $D/hi-limpa-overlay.log
+        [ -f /tmp/hi-overlay-sobras-$VER.tgz ] && mv /tmp/hi-overlay-sobras-$VER.tgz /mnt/UDISK/
+        sync
+    ) </dev/null >/dev/null 2>&1 &
+}

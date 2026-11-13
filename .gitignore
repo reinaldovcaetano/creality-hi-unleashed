@@ -1,0 +1,8 @@
+insumos/
+saida/
+pacote/p2/
+pacote/fluidd/
+pacote/local/
+.DS_Store
+*.pyc
+__pycache__/

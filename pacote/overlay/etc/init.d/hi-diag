@@ -1,0 +1,17 @@
+#!/bin/sh /etc/rc.common
+# Projeto Hi: diagnóstico no boot + SSH de reserva na porta 2222 com log.
+START=99
+STOP=10
+
+start() {
+    # tudo em segundo plano: o UDISK é montado tarde pela Creality e não podemos travar o boot
+    (
+        L=/mnt/UDISK/printer_data/logs
+        n=0; while ! grep -q " /mnt/UDISK " /proc/mounts && [ $n -lt 180 ]; do sleep 1; n=$((n+1)); done
+        mkdir -p "$L"
+        # SSH de reserva: chave do Mac e senha, com log detalhado
+        /usr/sbin/dropbear -F -E -p 2222 >>"$L/hi-ssh2222.log" 2>&1 &
+        # diagnóstico 90 s depois e de novo aos 10 min
+        sleep 90; /usr/bin/hi-diag.sh; sleep 510; /usr/bin/hi-diag.sh
+    ) </dev/null >/dev/null 2>&1 &
+}
