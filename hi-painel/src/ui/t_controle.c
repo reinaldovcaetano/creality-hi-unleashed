@@ -36,13 +36,12 @@ static void ev_passo(lv_event_t *e)
 }
 static void set_bico(double v, void *u) { (void)u; hi_gcode("M104 S%.0f", v); }
 static void set_mesa(double v, void *u) { (void)u; hi_gcode("M140 S%.0f", v); }
-static void set_vent(double v, void *u) { (void)u; hi_gcode("M106 S%.0f", v * 255 / 100); }
 static void ev_num(lv_event_t *e)
 {
     int k = (int)(intptr_t)lv_event_get_user_data(e);
     if (k == 0) hi_teclado_num("Bico (" GRAU "C, 0 desliga)", hi_e.bico_alvo, 0, 300, 0, set_bico, NULL);
     if (k == 1) hi_teclado_num("Mesa (" GRAU "C, 0 desliga)", hi_e.mesa_alvo, 0, 110, 0, set_mesa, NULL);
-    if (k == 2) hi_teclado_num("Ventoinha da peça (%)", hi_e.ventoinha * 100, 0, 100, 0, set_vent, NULL);
+    if (k == 2) hi_ventoinha_popup();
 }
 static void ev_luz(lv_event_t *e)
 {

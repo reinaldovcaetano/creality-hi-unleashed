@@ -253,3 +253,46 @@ static void reinicio_tique(const hi_estado_t *e)
         re_inicio = hi_agora() - 1e6;   /* não cria de novo */
     }
 }
+
+/* ---------------- ventoinha da peça: deslizador de velocidade real ---------------- */
+static lv_obj_t *vp_f, *vp_valor, *vp_sl, *vp_sw;
+static void vp_aplicar(void)
+{
+    int pct = lv_slider_get_value(vp_sl);
+    char b[16]; snprintf(b, sizeof b, "%d%%", pct); lv_label_set_text(vp_valor, b);
+    if (lv_obj_has_state(vp_sw, LV_STATE_CHECKED))
+        hi_gcode("SET_PIN PIN=fan0 VALUE=%d", (pct * 255 + 50) / 100);   /* valor real, sem a escala do M106 */
+}
+static void vp_ev_sl(lv_event_t *e)
+{
+    char b[16]; snprintf(b, sizeof b, "%d%%", (int)lv_slider_get_value(vp_sl)); lv_label_set_text(vp_valor, b);
+    if (lv_event_get_code(e) == LV_EVENT_RELEASED) vp_aplicar();
+}
+static void vp_ev_sw(lv_event_t *e)
+{
+    (void)e;
+    if (lv_obj_has_state(vp_sw, LV_STATE_CHECKED)) vp_aplicar(); else hi_gcode("M107");
+}
+static void vp_ev_ok(lv_event_t *e) { (void)e; hi_bloquear_toque(250); lv_obj_del_async(vp_f); vp_f = NULL; }
+void hi_ventoinha_popup(void)
+{
+    vp_f = modal();
+    lv_obj_t *k = hi_cartao(vp_f, 16, 36, HI_W - 32, 168);
+    lv_obj_t *t = hi_rotulo(k, "Ventoinha da peça", &hi_font_14, COR_TEXTO); lv_obj_set_pos(t, 12, 10);
+    int atual = (int)(hi_e.ventoinha * 100 + 0.5);
+    vp_sw = lv_switch_create(k); lv_obj_set_size(vp_sw, 48, 26); lv_obj_align(vp_sw, LV_ALIGN_TOP_RIGHT, -12, 8);
+    lv_obj_set_style_bg_color(vp_sw, COR_MESA, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    if (atual > 0) lv_obj_add_state(vp_sw, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(vp_sw, vp_ev_sw, LV_EVENT_VALUE_CHANGED, NULL);
+    vp_valor = hi_rotulo(k, "", &hi_font_28, COR_MESA); lv_obj_set_pos(vp_valor, 12, 40);
+    vp_sl = lv_slider_create(k); lv_obj_set_size(vp_sl, HI_W - 80, 14); lv_obj_set_pos(vp_sl, 18, 92);
+    lv_slider_set_range(vp_sl, 20, 100); lv_slider_set_value(vp_sl, atual < 20 ? 50 : atual, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(vp_sl, COR_MESA, LV_PART_INDICATOR); lv_obj_set_style_bg_color(vp_sl, COR_TEXTO, LV_PART_KNOB);
+    lv_obj_set_ext_click_area(vp_sl, 14);
+    lv_obj_add_event_cb(vp_sl, vp_ev_sl, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(vp_sl, vp_ev_sl, LV_EVENT_RELEASED, NULL);
+    char b[16]; snprintf(b, sizeof b, "%d%%", (int)lv_slider_get_value(vp_sl)); lv_label_set_text(vp_valor, b);
+    lv_obj_t *d = hi_rotulo(k, "velocidade real  \xE2\x80\xA2  mínimo 20%", &hi_font_12, COR_TEXTO2); lv_obj_set_pos(d, 12, 114);
+    lv_obj_t *ok = hi_botao(k, LV_SYMBOL_OK "  OK", COR_DESTAQUE, 100, 32); lv_obj_align(ok, LV_ALIGN_BOTTOM_RIGHT, -10, -8);
+    lv_obj_add_event_cb(ok, vp_ev_ok, LV_EVENT_CLICKED, NULL);
+}

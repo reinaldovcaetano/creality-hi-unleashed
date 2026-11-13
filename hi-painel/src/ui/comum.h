@@ -15,6 +15,8 @@ void hi_teclado_num(const char *titulo, double inicial, double min, double max, 
 typedef void (*hi_menu_cb)(int opcao, void *ud);
 /* menu com até 4 opções empilhadas; a última pode ser "Voltar" (cb recebe o índice) */
 void hi_menu(const char *titulo, const char *texto, const char *opcoes[], const lv_color_t cores[], int n, hi_menu_cb cb, void *ud);
+/* janela com deslizador da velocidade REAL da ventoinha da peça (20-100%) + liga/desliga */
+void hi_ventoinha_popup(void);
 void hi_teclado_texto(const char *titulo, const char *inicial, hi_txt_cb cb, void *ud);
 
 /* a tela atual registra uma função chamada a cada 500 ms com o estado ao vivo (zerada ao trocar de tela) */

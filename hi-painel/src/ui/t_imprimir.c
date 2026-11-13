@@ -252,7 +252,6 @@ static void set_vel(double v, void *u) { (void)u; hi_gcode("M220 S%.0f", v); }
 static void set_fluxo(double v, void *u) { (void)u; hi_gcode("M221 S%.0f", v); }
 static void set_bico(double v, void *u) { (void)u; hi_gcode("M104 S%.0f", v); }
 static void set_mesa(double v, void *u) { (void)u; hi_gcode("M140 S%.0f", v); }
-static void set_vent(double v, void *u) { (void)u; hi_gcode("M106 S%.0f", v * 255 / 100); }
 static void ev_num(lv_event_t *e)
 {
     int k = (int)(intptr_t)lv_event_get_user_data(e);
@@ -260,7 +259,7 @@ static void ev_num(lv_event_t *e)
     if (k == 1) hi_teclado_num("Fluxo (%)", hi_e.fluxo_fator * 100, 50, 150, 0, set_fluxo, NULL);
     if (k == 2) hi_teclado_num("Bico (" GRAU "C)", hi_e.bico_alvo, 0, 300, 0, set_bico, NULL);
     if (k == 3) hi_teclado_num("Mesa (" GRAU "C)", hi_e.mesa_alvo, 0, 110, 0, set_mesa, NULL);
-    if (k == 4) hi_teclado_num("Ventoinha da peça (%)", hi_e.ventoinha * 100, 0, 100, 0, set_vent, NULL);
+    if (k == 4) hi_ventoinha_popup();
 }
 static void ev_z(lv_event_t *e)
 {
