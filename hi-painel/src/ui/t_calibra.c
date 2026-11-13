@@ -426,7 +426,11 @@ static lv_obj_t *mh_area, *l_mh_info;
 static void mh_desenhar(void);
 /* Ajuste 13/11: mesma calibração da tela original: macro G29 da Creality = limpa o bico (NOZ_CLEAR), G28 Z,
  * Z_TILT_ADJUST, BED_MESH_CALIBRATE e grava sozinha (CXSAVE_CONFIG). Mesa a 60 °C (definido pela macro). */
-static void mh_iniciar(void *u) { (void)u; job_iniciar(); mh_fase = 1; hi_gcode("G29"); mh_desenhar(); }
+/* Ajuste 13/11 (2): a mesa é medida na temperatura que vai ser usada: padrão = mesa do filamento ativo, editável.
+ * A macro G29 aceita BED=<temp> (scripts/macro_g29_temp.py) e espera a mesa chegar antes de medir. */
+static void mh_iniciar(void *u) { (void)u; job_iniciar(); mh_fase = 1; hi_gcode("G29 BED=%d", mh_temp); mh_desenhar(); }
+static void set_mh_temp(double v, void *u) { (void)u; mh_temp = (int)v; mh_desenhar(); }
+static void ev_mh_temp(lv_event_t *e) { (void)e; if (mh_fase == 1) return; hi_teclado_num("Mesa na calibração (" GRAU "C)", mh_temp, 40, 110, 0, set_mh_temp, NULL); }
 static void op_pendente(int op, void *u)
 {
     (void)u;
@@ -442,7 +446,8 @@ static void ev_mh_iniciar(lv_event_t *e)
         hi_menu("Calibração não salva", "Há um resultado calculado e não gravado.", op, cor, 3, op_pendente, NULL);
         return;
     }
-    hi_confirmar("Nivelar e medir a malha?", "Igual à tela original: limpa o bico, nivela os dois Z e mede a malha com o sensor de pressão (mesa a 60\xC2\xB0" "C). Grava sozinha no fim. Mesa limpa e livre.", LV_SYMBOL_PLAY "  Iniciar", COR_DESTAQUE, mh_iniciar, NULL);
+    char m[220]; snprintf(m, sizeof m, "Limpa o bico, nivela os dois Z, espera a mesa chegar a %d" GRAU "C e mede a malha. Grava sozinha no fim. Mesa limpa e livre.", mh_temp);
+    hi_confirmar("Nivelar e medir a malha?", m, LV_SYMBOL_PLAY "  Iniciar", COR_DESTAQUE, mh_iniciar, NULL);
 }
 static void mh_mapa(lv_obj_t *pai)
 {
@@ -470,15 +475,20 @@ static void mh_desenhar(void)
     lv_obj_t *v = hi_rotulo(c, b, &hi_font_14, COR_TEXTO); lv_obj_set_pos(v, 8, 6);
     snprintf(b, sizeof b, "%dx%d  \xE2\x80\xA2  %s", hi_e.malha_col, hi_e.malha_lin, hi_e.malha_perfil);
     lv_obj_t *p = hi_rotulo(c, b, &hi_font_12, COR_TEXTO2); lv_obj_set_pos(p, 8, 52);
+    int med = hi_pref("malha_temp", 0);
+    if (med > 0) { snprintf(b, sizeof b, "medida a %d" GRAU, med); lv_obj_t *mt = hi_rotulo(c, b, &hi_font_12, COR_TEXTO2); lv_obj_set_pos(mt, 8, 70); }
+    snprintf(b, sizeof b, "Mesa %d" GRAU " " LV_SYMBOL_EDIT, mh_temp);
+    lv_obj_t *tb = hi_botao(mh_area, b, COR_CARTAO2, 102, 28); lv_obj_set_pos(tb, 210, 100);
+    lv_obj_add_event_cb(tb, ev_mh_temp, LV_EVENT_CLICKED, NULL);
     if (mh_fase == 1) {
-        l_mh_info = hi_rotulo(mh_area, "Medindo...", &hi_font_12, COR_TEXTO); lv_obj_set_pos(l_mh_info, 212, 104);
-        lv_obj_t *x = hi_botao(mh_area, LV_SYMBOL_STOP " Parar", COR_ERRO, 102, 44); lv_obj_set_pos(x, 210, 156);
+        l_mh_info = hi_rotulo(mh_area, "Medindo...", &hi_font_12, COR_TEXTO); lv_obj_set_pos(l_mh_info, 212, 132);
+        lv_obj_t *x = hi_botao(mh_area, LV_SYMBOL_STOP " Parar", COR_ERRO, 102, 38); lv_obj_set_pos(x, 210, 162);
         lv_obj_add_event_cb(x, ev_interromper, LV_EVENT_CLICKED, NULL);
         return;
     }
     lv_obj_t *aviso = hi_rotulo(mh_area, hi_e.filamento_no_bico ? LV_SYMBOL_WARNING " retire o\nfilamento antes" : LV_SYMBOL_OK " sem filamento\nno bico", &hi_font_12, hi_e.filamento_no_bico ? COR_AVISO : COR_OK);
-    lv_obj_set_pos(aviso, 212, 102);
-    lv_obj_t *m = hi_botao(mh_area, LV_SYMBOL_REFRESH " Calibrar", COR_DESTAQUE, 102, 44); lv_obj_set_pos(m, 210, 152);
+    lv_obj_set_pos(aviso, 212, 132);
+    lv_obj_t *m = hi_botao(mh_area, LV_SYMBOL_REFRESH " Calibrar", COR_DESTAQUE, 102, 38); lv_obj_set_pos(m, 210, 162);
     lv_obj_add_event_cb(m, ev_mh_iniciar, LV_EVENT_CLICKED, NULL);
 }
 static void mh_atualizar(const hi_estado_t *e)
@@ -491,7 +501,7 @@ static void mh_atualizar(const hi_estado_t *e)
     if (job_passo(e)) {
         job.ativo = 0; mh_fase = job.erro ? 0 : 2;
         if (job.erro) { char m[240]; snprintf(m, sizeof m, "Falhou: %s", job_erro_txt()); hi_toast(m, COR_ERRO); }
-        else { char r[64]; snprintf(r, sizeof r, "variação %.3f mm", e->malha_max - e->malha_min); hi_calib_registrar("Nivelamento e malha", hi_br(r)); hi_toast("Nivelado e medido. Já ficou gravado.", COR_OK); }
+        else { char r[64]; snprintf(r, sizeof r, "variação %.3f mm a %d" GRAU, e->malha_max - e->malha_min, mh_temp); hi_pref_set("malha_temp", mh_temp); hi_calib_registrar("Nivelamento e malha", hi_br(r)); hi_toast("Nivelado e medido. Já ficou gravado.", COR_OK); }
         mh_desenhar();
     }
 }
@@ -660,7 +670,7 @@ lv_obj_t *tela_historico_calib(void)
 /* ================= calibrar tudo ================= */
 /* Ordem definida com o usuário (13/11/2026): home primeiro (G28), depois vibração, PID do bico, PID da mesa
  * e malha por último (a mesa já está quente do PID). O nivelamento Z separado é opcional (logo após o home). */
-static int ct_sel[5] = {0, 1, 1, 1, 1}, ct_rodando, ct_etapa;   /* etapa -1 = home */
+static int ct_sel[5] = {0, 1, 1, 1, 1}, ct_rodando, ct_etapa, ct_mesa;   /* etapa -1 = home */
 static lv_obj_t *ct_btn[5], *ct_info;
 static const char *ct_nome[5] = {"Nível Z", "Vibração", "PID do bico", "PID da mesa", "Nivel.+malha"};
 static void ev_ct_sel(lv_event_t *e)
@@ -675,10 +685,11 @@ static void ct_proxima(void)
         ct_rodando = 0; hi_gcode("TURN_OFF_HEATERS\nM107");
         lv_label_set_text(ct_info, ct_sel[4] ? "Pronto. A malha já está ativa e gravada.\nToque em Salvar tudo para reiniciar e usar PID/vibração."
                                              : "Tudo pronto. Toque em Salvar tudo para gravar\n(SAVE_CONFIG) e reiniciar o Klipper.");
+        if (ct_sel[4]) hi_pref_set("malha_temp", ct_mesa);
         hi_calib_registrar("Calibrar tudo", "concluído"); return;
     }
     hi_fil_t f[HI_MAX_FIL]; int at; hi_fil_carregar(f, HI_MAX_FIL, &at);
-    int tb = at >= 0 ? f[at].bico : 230, tm = at >= 0 ? f[at].mesa : 60;
+    int tb = at >= 0 ? f[at].bico : 230, tm = at >= 0 ? f[at].mesa : 60; ct_mesa = tm;
     job_iniciar();
     switch (ct_etapa) {
         case -1: hi_gcode("G28"); break;
@@ -686,7 +697,7 @@ static void ct_proxima(void)
         case 1: hi_gcode("SHAPER_CALIBRATE"); break;
         case 2: hi_gcode("M106 S255\nPID_CALIBRATE HEATER=extruder TARGET=%d\nM107", tb); break;
         case 3: hi_gcode("PID_CALIBRATE HEATER=heater_bed TARGET=%d", tm); break;
-        case 4: hi_gcode("G29"); break;   /* limpa bico, Z, malha e grava (igual à tela original) */
+        case 4: hi_gcode("G29 BED=%d", tm); break;   /* malha na mesa do filamento ativo */   /* limpa bico, Z, malha e grava (igual à tela original) */
     }
 }
 static void ct_iniciar(void *u) { (void)u; ct_rodando = 1; ct_etapa = -1; ct_proxima(); }

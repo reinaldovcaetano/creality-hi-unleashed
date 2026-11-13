@@ -6,6 +6,7 @@
 #include "tema.h"
 #include "comum.h"
 #include "telas.h"
+#include "../dados/arquivos.h"
 #include "../dados/miniatura.h"
 
 #define GRAU "\xC2\xB0"
@@ -108,7 +109,12 @@ static void ev_imprimir(lv_event_t *e)
 {
     (void)e;
     if (hi_ocupada(&hi_e)) { hi_toast("Já existe uma impressão em andamento", COR_AVISO); return; }
-    char m[256]; snprintf(m, sizeof m, "%s\n\nConfira se a mesa está limpa e o filamento carregado.", base(hi_arquivo_sel));
+    char m[400]; snprintf(m, sizeof m, "%s\n\nConfira se a mesa está limpa e o filamento carregado.", base(hi_arquivo_sel));
+    /* malha medida em outra temperatura: avisa (não bloqueia) */
+    int med = hi_pref("malha_temp", 0), mt = 0; int n = hi_arquivos(arqs, HI_MAX_ARQ, NULL);
+    for (int i = 0; i < n; i++) if (!strcmp(arqs[i].nome, hi_arquivo_sel)) mt = (int)(arqs[i].mesa_temp + 0.5);
+    if (med > 0 && mt > 0 && abs(mt - med) >= 10)
+        snprintf(m + strlen(m), sizeof m - strlen(m), "\n\n" LV_SYMBOL_WARNING " A malha foi medida com a mesa a %d" GRAU " e este arquivo usa %d" GRAU ". Para a melhor 1a camada, refaça a malha a %d" GRAU ".", med, mt, mt);
     hi_confirmar("Imprimir?", m, LV_SYMBOL_PLAY "  Imprimir", COR_OK, iniciar, NULL);
 }
 

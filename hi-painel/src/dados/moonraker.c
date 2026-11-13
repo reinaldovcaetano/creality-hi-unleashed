@@ -298,6 +298,7 @@ static void buscar_arquivos(void)
         cJSON *res = cJSON_GetObjectItem(jm, "result");
         tmp[i].tempo_estimado = num(res, "estimated_time", 0);
         tmp[i].filamento_mm = num(res, "filament_total", 0);
+        tmp[i].mesa_temp = num(res, "first_layer_bed_temp", 0);
         double lh = num(res, "layer_height", 0), oh = num(res, "object_height", 0);
         tmp[i].camadas = lh > 0 ? (int)(oh / lh + 0.5) : 0;
         cJSON_Delete(jm);

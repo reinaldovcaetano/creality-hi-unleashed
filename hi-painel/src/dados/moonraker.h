@@ -10,7 +10,7 @@
 
 typedef struct {
     char nome[160];
-    double tamanho, modificado, tempo_estimado, filamento_mm;
+    double tamanho, modificado, tempo_estimado, filamento_mm, mesa_temp;
     int camadas;
 } hi_arquivo_t;
 
