@@ -282,15 +282,26 @@ int main(int argc, char **argv)
                 /* boot: assume quando a Creality chegou na tela inicial, sem queda de energia nem atualização pendente */
                 static uint32_t desde_home;
                 if (modo_boot) {
+                    /* Ajuste 13/11: com atualização no pendrive o painel ESPERA (não desiste): quando o pendrive sai
+                     * e a Creality está na tela inicial, ele assume. Impressão em andamento: deixa a Creality. */
+                    static int esperando_usb;
                     int na_home = !strcmp(ult_pagina, "ui_screen_HomeNormal") && hi_e.conectado && !strcmp(hi_e.klippy, "ready");
                     if (na_home && hi_e.power_loss && arquivo_queda()) {
                         modo_boot = 0; tela_ao_abrir = tela_queda_energia;
                         fprintf(stderr, "hi-painel: queda de energia pendente (%s): tela própria\n", hi_ql_arquivo); abrir(); continue;
                     }
-                    if (tem_atualizacao_usb() || hi_ocupada(&hi_e)) { modo_boot = 0; fprintf(stderr, "hi-painel: boot fica na Creality (impressão ou atualização)\n"); }
-                    else if (na_home) { if (!desde_home) desde_home = t; else if (t - desde_home > 8000) { modo_boot = 0; abrir(); continue; } }
+                    if (hi_ocupada(&hi_e)) { modo_boot = 0; fprintf(stderr, "hi-painel: boot fica na Creality (impressão em andamento)\n"); }
+                    else if (tem_atualizacao_usb()) {
+                        if (!esperando_usb) fprintf(stderr, "hi-painel: atualização no pendrive: esperando o pendrive sair\n");
+                        esperando_usb = 1; desde_home = 0;
+                    }
+                    else if (na_home) {
+                        if (esperando_usb) { esperando_usb = 0; fprintf(stderr, "hi-painel: pendrive retirado\n"); }
+                        if (!desde_home) desde_home = t; else if (t - desde_home > 8000) { modo_boot = 0; abrir(); continue; }
+                    }
                     else desde_home = 0;
-                    if (t > 240000) modo_boot = 0;   /* 4 min sem chegar na home: desiste e deixa a Creality */
+                    /* desiste só se a Creality nunca chegou na tela inicial (ex.: assistente de primeira configuração) */
+                    if (modo_boot && !esperando_usb && t > 240000 && !desde_home) { modo_boot = 0; fprintf(stderr, "hi-painel: Creality não chegou na tela inicial em 4 min: fica a Creality\n"); }
                 }
             }
             usleep(30000);
