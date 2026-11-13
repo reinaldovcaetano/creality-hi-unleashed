@@ -96,26 +96,49 @@ lv_obj_t *tela_imprimir(void)
 }
 
 /* ================= detalhes do arquivo ================= */
-static void iniciar(void *ud)
+static int arq_mesa_temp(void)
 {
-    (void)ud;
+    int n = hi_arquivos(arqs, HI_MAX_ARQ, NULL);
+    for (int i = 0; i < n; i++) if (!strcmp(arqs[i].nome, hi_arquivo_sel)) return (int)(arqs[i].mesa_temp + 0.5);
+    return 0;
+}
+static void iniciar_com(int usar_salva)
+{
+    /* Ajuste 13/11: o START_PRINT (impressões pelo painel/Fluidd) mede a malha na temperatura do arquivo antes de
+     * imprimir; com skip_mesh=1 ele só carrega a malha salva (o home e o Z preciso continuam iguais). */
+    hi_gcode("SET_GCODE_VARIABLE MACRO=START_PRINT VARIABLE=skip_mesh VALUE=%d", usar_salva);
+    if (!usar_salva) { int mt = arq_mesa_temp(); if (mt > 0) hi_pref_set("malha_temp", mt); }
     char c[400], q[512]; urlcod(hi_arquivo_sel, c, sizeof c);
     snprintf(q, sizeof q, "/printer/print/start?filename=%s", c);
     hi_req("POST", q);
-    hi_toast("Iniciando impressão...", COR_OK);
+    hi_toast(usar_salva ? "Iniciando com a malha salva..." : "Iniciando (mede a malha antes)...", COR_OK);
     hi_definir_raiz(tela_inicio); hi_ir(tela_imprimindo);
 }
+static void op_imprimir(int op, void *u)
+{
+    (void)u;
+    if (op == 0) iniciar_com(0);
+    else if (op == 1) iniciar_com(1);
+    else if (op == 2 && hi_e.config_pendente) { hi_gcode("FIRMWARE_RESTART"); hi_reiniciando("descartando calibração não salva", "Pendências descartadas. Pode imprimir."); }
+}
+static void op_imprimir_sem(int op, void *u) { if (op < 2) op_imprimir(op, u); }
 static void ev_imprimir(lv_event_t *e)
 {
     (void)e;
     if (hi_ocupada(&hi_e)) { hi_toast("Já existe uma impressão em andamento", COR_AVISO); return; }
-    char m[400]; snprintf(m, sizeof m, "%s\n\nConfira se a mesa está limpa e o filamento carregado.", base(hi_arquivo_sel));
-    /* malha medida em outra temperatura: avisa (não bloqueia) */
-    int med = hi_pref("malha_temp", 0), mt = 0; int n = hi_arquivos(arqs, HI_MAX_ARQ, NULL);
-    for (int i = 0; i < n; i++) if (!strcmp(arqs[i].nome, hi_arquivo_sel)) mt = (int)(arqs[i].mesa_temp + 0.5);
-    if (med > 0 && mt > 0 && abs(mt - med) >= 10)
-        snprintf(m + strlen(m), sizeof m - strlen(m), "\n\n" LV_SYMBOL_WARNING " A malha foi medida com a mesa a %d" GRAU " e este arquivo usa %d" GRAU ". Para a melhor 1a camada, refaça a malha a %d" GRAU ".", med, mt, mt);
-    hi_confirmar("Imprimir?", m, LV_SYMBOL_PLAY "  Imprimir", COR_OK, iniciar, NULL);
+    static char m[420]; int med = hi_pref("malha_temp", 0), mt = arq_mesa_temp();
+    m[0] = 0;
+    if (mt > 0) snprintf(m, sizeof m, "Arquivo: mesa %d" GRAU, mt);
+    if (med > 0) snprintf(m + strlen(m), sizeof m - strlen(m), "%sMalha salva: %d" GRAU, m[0] ? "  \xE2\x80\xA2  " : "", med);
+    if (!m[0]) snprintf(m, sizeof m, "Mesa limpa e filamento carregado?");
+    if (hi_e.config_pendente)
+        snprintf(m + strlen(m), sizeof m - strlen(m), "\n" LV_SYMBOL_WARNING " Calibração não salva: grava se medir a malha");
+    static const char *op[4]; static lv_color_t cor[4]; int n = 0;
+    op[n] = LV_SYMBOL_PLAY "  Medir malha e imprimir"; cor[n++] = COR_OK;
+    op[n] = LV_SYMBOL_PLAY "  Usar malha salva"; cor[n++] = COR_DESTAQUE;
+    if (hi_e.config_pendente) { op[n] = LV_SYMBOL_TRASH "  Descartar pendências"; cor[n++] = COR_AVISO; }
+    op[n] = LV_SYMBOL_LEFT "  Voltar"; cor[n++] = COR_CARTAO2;
+    hi_menu("Imprimir?", m, op, cor, n, hi_e.config_pendente ? op_imprimir : op_imprimir_sem, NULL);
 }
 
 lv_obj_t *tela_arquivo(void)

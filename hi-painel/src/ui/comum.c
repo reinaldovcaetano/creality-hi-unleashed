@@ -107,15 +107,24 @@ static void menu_ev(lv_event_t *e)
 void hi_menu(const char *titulo, const char *texto, const char *opcoes[], const lv_color_t cores[], int n, hi_menu_cb cb, void *ud)
 {
     menu_t *m = calloc(1, sizeof *m); m->cb = cb; m->ud = ud; m->f = modal();
-    int alt = 56 + (texto ? 22 : 0) + n * 40;
+    /* texto com quebra de linha: mede a altura e, se não couber, aperta os botões */
+    lv_point_t tam = {0, 0};
+    if (texto) lv_txt_get_size(&tam, texto, &hi_font_12, 0, 2, HI_W - 84, LV_TEXT_FLAG_NONE);
+    int th = texto ? tam.y + 8 : 0, bh = 36, passo = 40;
+    if (48 + th + n * passo > HI_H - 8) { bh = 32; passo = 35; }
+    int alt = 48 + th + n * passo; if (alt > HI_H - 4) alt = HI_H - 4;
     lv_obj_t *k = hi_cartao(m->f, 30, (HI_H - alt) / 2, HI_W - 60, alt);
     lv_obj_t *t = hi_rotulo(k, titulo, &hi_font_16, COR_TEXTO); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 8);
     lv_label_set_long_mode(t, LV_LABEL_LONG_DOT); lv_obj_set_width(t, HI_W - 80); lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
     int y = 34;
-    if (texto) { lv_obj_t *x = hi_rotulo(k, texto, &hi_font_12, COR_TEXTO2); lv_obj_align(x, LV_ALIGN_TOP_MID, 0, y); y += 22; }
+    if (texto) {
+        lv_obj_t *x = hi_rotulo(k, texto, &hi_font_12, COR_TEXTO2);
+        lv_label_set_long_mode(x, LV_LABEL_LONG_WRAP); lv_obj_set_width(x, HI_W - 84); lv_obj_set_style_text_align(x, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_align(x, LV_ALIGN_TOP_MID, 0, y); y += th;
+    }
     for (int i = 0; i < n; i++) {
-        lv_obj_t *b = hi_botao(k, opcoes[i], cores[i].full ? cores[i] : COR_CARTAO2, HI_W - 84, 36);
-        lv_obj_align(b, LV_ALIGN_TOP_MID, 0, y + i * 40);
+        lv_obj_t *b = hi_botao(k, opcoes[i], cores[i].full ? cores[i] : COR_CARTAO2, HI_W - 84, bh);
+        lv_obj_align(b, LV_ALIGN_TOP_MID, 0, y + i * passo);
         lv_obj_set_user_data(b, m);
         lv_obj_add_event_cb(b, menu_ev, LV_EVENT_CLICKED, (void *)(intptr_t)i);
     }

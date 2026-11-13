@@ -260,6 +260,12 @@ static void parse_shaper(const char *txt, int ax)
     char nm[8] = "";
     if (r && (sscanf(r, "Recommended shaper_type_%*c = %7[^,]", nm) == 1 || sscanf(r, "Recommended shaper is %7s", nm) == 1))
         for (int i = 0; i < n_shp[ax]; i++) if (!strcmp(shp[ax][i].nome, nm)) rec_shp[ax] = i;
+    /* Ajuste 13/11: prefere o mzv quando vibra quase igual ao recomendado (doc do Klipper: menos arredondamento
+     * que ei/2hump_ei e aceita aceleração maior). Nunca escolhe 2hump/3hump sozinho. */
+    for (int i = 0; i < n_shp[ax]; i++)
+        if (!strcmp(shp[ax][i].nome, "mzv") && i != rec_shp[ax] && shp[ax][i].vib <= shp[ax][rec_shp[ax]].vib + 3.0) { rec_shp[ax] = i; break; }
+    if (strstr(shp[ax][rec_shp[ax]].nome, "hump"))
+        for (int i = 0; i < n_shp[ax]; i++) if (!strcmp(shp[ax][i].nome, "mzv")) { rec_shp[ax] = i; break; }
     esc_shp[ax] = rec_shp[ax];
 }
 static void sh_iniciar(void *u)
