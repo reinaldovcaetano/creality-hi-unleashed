@@ -23,14 +23,14 @@ sensor de pressão (`prtouch_v3`) e o home preciso (`NEXT_HOMEZ_NACCU`).
 | `[nozzle_clear] clear_cnt` | 10 | **6** | menos tempo de limpeza; mantém 3 toques |
 | `START_PRINT` | sempre mede | `variable_skip_mesh` | o Hi Painel pode imprimir com a malha salva |
 | `G29` | 60 °C fixo | `G29 BED=<temp>` (`scripts/macro_g29_temp.py`) | malha medida na temperatura de uso; sem `BED` = original |
-| Shaper | 2hump_ei | mzv (medido) | a documentação do Klipper desaconselha 2hump_ei na frequência de ressonância; mzv suaviza menos |
+| Shaper | 2hump_ei | ~~mzv~~ → **o recomendado pela medição** | a troca para mzv foi **desfeita** na mesma noite: ver "Vibração na base 1.1.0.74" abaixo |
 
 ## Hi Painel
 
 - **Imprimir**: "Medir malha e imprimir" (padrão), "Usar malha salva", "Descartar pendências" (se houver calibração não salva) e Voltar.
 - **Nivelamento e malha**: temperatura da mesa editável (padrão = filamento ativo); mostra em que temperatura a malha salva foi medida.
 - **Calibrar tudo**: home → vibração → PID bico → PID mesa → malha (na mesa do filamento ativo).
-- **Vibração**: prefere mzv quando vibra quase igual ao recomendado; nunca sugere 2hump/3hump.
+- **Vibração**: usa o shaper recomendado pela medição (a preferência por mzv foi retirada). Entende o formato novo da base 1.1.0.74.
 
 ## Fontes
 
@@ -46,6 +46,27 @@ sensor de pressão (`prtouch_v3`) e o home preciso (`NEXT_HOMEZ_NACCU`).
 - O Hi Painel consulta a cada 0,7 s só quando está na frente; com a tela da Creality ou em descanso, a cada 4 s. A matriz da malha vem a cada 10 consultas.
 - Medido parado: CPU ~22% ocupada (2 núcleos a 1,2 GHz), ~378 MB de RAM livres de 500, 38 °C.
 - Serviços: o pacote não sobe mais o `web-server` (app/nuvem Creality, portas 80/443/9998/9999) nem o `webrtc` da nuvem. A câmera do Fluidd continua (`cam_app` + `webrtc_local` na 8000). SSH só na 2222. Relógio pelo NTP.br (`a.st1.ntp.br`, `0/1.br.pool.ntp.org`). Para quem já tem a Hi instalada, o `hi-ajustes` aplica o mesmo no boot. **Consequência:** o app Creality Print/Cloud deixa de enxergar a impressora (use Fluidd e Hi Painel).
+- **Monitor da Creality** (`/usr/bin/Monitor`, achado no boot de 13/11): ele confere os processos com `ps | grep` e religa `web-server`, `webrtc` (por `/etc/init.d/webrtc restart`) e `webrtc_local` se não os vê. Desligar no init não basta. Por isso `/usr/bin/web-server` e `/usr/bin/webrtc` viram programas vazios (`while sleep`), como o `app-server`, e os originais ficam em `.orig`. O Monitor encontra os processos, e nenhuma porta abre. Isso está no build (`dentro.sh`) e no `hi-ajustes`. Testado ao vivo: o Monitor religou os vazios (1,5 MB cada), as portas ficaram só 2222/4408/7125/8000 e a câmera respondeu.
+
+## Vibração na base 1.1.0.74 (13/11/2026, à noite)
+
+- A base 1.1.0.74 troca o cálculo do shaper do Klipper por um módulo próprio, em C. No console aparece só o melhor shaper:
+  `best shaper.name 2hump_ei, best shaper.freq 50.8Hz, best shaper.vibrs 0.0179, ... best shaper.max_accel 2869`
+  - As linhas `Fitted shaper '...'` do Klipper padrão não aparecem mais.
+  - O `klippy.log` tem uma linha por shaper (nível ERROR), mas os nomes estão deslocados uma posição e os campos trocados. Não use essas linhas.
+  - `variable_autotune_shapers` não é respeitado: ele testa zv, mzv, ei, 2hump_ei e 3hump_ei.
+- O CSV `/tmp/shaper_calc_output_<eixo>-<data>.csv` traz freq, `psd_sum`, `psd_x/y/z`, `after_shaper` e a resposta de cada shaper (×10000).
+  - Com a conta do Klipper (limiar = pico/20), a vibração que sobra bate exatamente com a da Creality.
+- Medição de 13/11 às 19h08, pela tela da Creality:
+
+| Eixo | zv | mzv | ei | 2hump_ei | 3hump_ei | escolhido |
+|---|---|---|---|---|---|---|
+| X (pico 48,9 Hz) | 26,2% | 7,9% | 7,5% | 1,8% | 0,5% | 2hump_ei 50,8 Hz (aceleração segura 2869) |
+| Y (pico 38,2 Hz) | 31,5% | 12,7% | 12,9% | 6,7% | 6,3% | 3hump_ei 52,4 Hz (aceleração segura 1890) |
+
+- **Conclusão:** nesta máquina, o mzv deixa 4 a 6 vezes mais vibração. Ele também ficaria numa frequência mais baixa (~41 Hz no X e ~35 Hz no Y), então aceita **menos** aceleração. A preferência por mzv foi retirada do Hi Painel.
+- O Hi Painel lê o formato novo e desenha o gráfico pelo CSV novo.
+- **Bug corrigido:** o nome do shaper cabia em 7 letras, então "2hump_ei" virava "2hump_e", um nome inválido no printer.cfg.
 
 ## Backup e como voltar atrás
 
@@ -64,7 +85,7 @@ sensor de pressão (`prtouch_v3`) e o home preciso (`NEXT_HOMEZ_NACCU`).
 
 - Uma impressão com "Medir malha e imprimir" e outra com "Usar malha salva".
 - Um Z tilt, para ver quantas tentativas leva com a tolerância de 0,03.
-- Uma medição nova de vibração pelo painel (para ver se ele prefere o mzv).
+- Uma medição nova de vibração pelo painel (formato novo, gráfico e Aplicar).
 - `G29 BED=` com temperatura diferente de 60 °C (esperando a mesa aquecer).
-- Um boot completo, para conferir que o SSH do sistema sobe na 2222, que a 22 fica fechada e que o web-server e o webrtc não voltam.
+- ~~Um boot completo~~: feito em 13/11 às 19h. O SSH subiu na 2222, a 22 ficou fechada e o NTP.br funcionou. **O web-server e o webrtc voltaram**, porque o Monitor da Creality os religa. Corrigido com programas vazios: ver abaixo. Falta mais um boot para confirmar.
 - Uma queda de energia real durante a impressão.

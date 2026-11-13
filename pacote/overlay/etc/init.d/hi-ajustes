@@ -23,7 +23,14 @@ sistema() {
         uci set dropbear.@dropbear[0].Port=2222; uci commit dropbear   # vale no próximo boot (a 2222 já está atendida)
     fi
     [ -e /etc/rc.d/S97webrtc ] && /etc/init.d/webrtc disable
-    pidof webrtc >/dev/null && /etc/init.d/webrtc stop
+    # o Monitor da Creality religa web-server e webrtc se não os vê no ps: troca por vazios (webrtc_local = câmera, fica)
+    for b in web-server webrtc; do
+        grep -q "Projeto Hi" /usr/bin/$b 2>/dev/null && continue
+        mv /usr/bin/$b /usr/bin/$b.orig
+        printf '#!/bin/sh\n# Projeto Hi: desligado (original em /usr/bin/%s.orig)\nwhile true; do sleep 3600; done\n' $b > /usr/bin/$b
+        chmod 755 /usr/bin/$b
+        killall $b 2>/dev/null
+    done
 }
 
 aplicar() {

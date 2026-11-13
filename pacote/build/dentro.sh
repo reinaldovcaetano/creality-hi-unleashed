@@ -68,6 +68,13 @@ rm -f $F/etc/rc.d/S80adbd $F/etc/rc.d/K99adbd
 rm -f $F/etc/rc.d/S97webrtc $F/etc/rc.d/K97webrtc
 sed -i 's# \$BIN_PATH/\$WEB_SERVER##' $F/etc/init.d/app
 grep -q 'WEB_SERVER \$BIN_PATH' $F/etc/init.d/app && { echo "ERRO: web-server ainda na APP_LIST"; exit 1; }
+# O Monitor da Creality religa web-server e webrtc se não os vê no ps (achado no boot de 13/11): trocar por vazios,
+# como o app-server. webrtc_local (câmera) é outro binário e fica.
+for b in web-server webrtc; do
+    mv $F/usr/bin/$b $F/usr/bin/$b.orig
+    printf '#!/bin/sh\n# Projeto Hi: desligado (original em /usr/bin/%s.orig)\nwhile true; do sleep 3600; done\n' $b > $F/usr/bin/$b
+    chmod 755 $F/usr/bin/$b
+done
 # relógio pelo NTP.br e SSH só na 2222 (a 22 da Creality sai)
 sed -i "/list server/d" $F/etc/config/system
 for ntps in 1.br.pool.ntp.org 0.br.pool.ntp.org a.st1.ntp.br; do sed -i "/^config timeserver ntp/a\\\tlist server '$ntps'" $F/etc/config/system; done

@@ -237,7 +237,7 @@ lv_obj_t *tela_pid(void)
 }
 
 /* ================= vibração (input shaper) ================= */
-typedef struct { char nome[8]; double hz, vib, suav, acel; } shp_t;
+typedef struct { char nome[16]; double hz, vib, suav, acel; } shp_t;
 static shp_t shp[2][8]; static int n_shp[2], rec_shp[2], esc_shp[2];
 static int sh_fase, sh_eixos, sh_eixo_vista;   /* eixos: 1=X 2=Y 3=ambos */
 static lv_obj_t *sh_area, *l_sh_info;
@@ -249,7 +249,7 @@ static void parse_shaper(const char *txt, int ax)
     const char *p = txt;
     while ((p = strstr(p, "Fitted shaper '"))) {
         shp_t s = {0};
-        if (sscanf(p, "Fitted shaper '%7[^']' frequency = %lf Hz (vibrations = %lf%%, smoothing ~= %lf)", s.nome, &s.hz, &s.vib, &s.suav) >= 2 && n_shp[ax] < 8) {
+        if (sscanf(p, "Fitted shaper '%15[^']' frequency = %lf Hz (vibrations = %lf%%, smoothing ~= %lf)", s.nome, &s.hz, &s.vib, &s.suav) >= 2 && n_shp[ax] < 8) {
             const char *q = strstr(p, "max_accel <= ");
             if (q && q - p < 300) s.acel = atof(q + 13);
             shp[ax][n_shp[ax]++] = s;
@@ -257,15 +257,23 @@ static void parse_shaper(const char *txt, int ax)
         p++;
     }
     const char *r = strstr(txt, "Recommended shaper");
-    char nm[8] = "";
-    if (r && (sscanf(r, "Recommended shaper_type_%*c = %7[^,]", nm) == 1 || sscanf(r, "Recommended shaper is %7s", nm) == 1))
+    char nm[16] = "";
+    if (r && (sscanf(r, "Recommended shaper_type_%*c = %15[^,]", nm) == 1 || sscanf(r, "Recommended shaper is %15s", nm) == 1))
         for (int i = 0; i < n_shp[ax]; i++) if (!strcmp(shp[ax][i].nome, nm)) rec_shp[ax] = i;
-    /* Ajuste 13/11: prefere o mzv quando vibra quase igual ao recomendado (doc do Klipper: menos arredondamento
-     * que ei/2hump_ei e aceita aceleração maior). Nunca escolhe 2hump/3hump sozinho. */
-    for (int i = 0; i < n_shp[ax]; i++)
-        if (!strcmp(shp[ax][i].nome, "mzv") && i != rec_shp[ax] && shp[ax][i].vib <= shp[ax][rec_shp[ax]].vib + 3.0) { rec_shp[ax] = i; break; }
-    if (strstr(shp[ax][rec_shp[ax]].nome, "hump"))
-        for (int i = 0; i < n_shp[ax]; i++) if (!strcmp(shp[ax][i].nome, "mzv")) { rec_shp[ax] = i; break; }
+    /* Base 1.1.0.74: o cálculo da Creality (módulo em C) só manda ao console o melhor shaper:
+     * "best shaper.name X, best shaper.freq F Hz, best shaper.vibrs V(fração), best shaper.smoothing S, ..., best shaper.max_accel A" */
+    if (!n_shp[ax] && (r = strstr(txt, "best shaper.name "))) {
+        shp_t s = {0};
+        if (sscanf(r, "best shaper.name %15[^,], best shaper.freq %lfHz, best shaper.vibrs %lf, best shaper.smoothing %lf",
+                   s.nome, &s.hz, &s.vib, &s.suav) >= 2) {
+            s.vib *= 100;
+            const char *q = strstr(r, "best shaper.max_accel ");
+            if (q && q - r < 300) s.acel = atof(q + 22);
+            shp[ax][n_shp[ax]++] = s; rec_shp[ax] = 0;
+        }
+    }
+    /* (13/11, à noite) tirada a preferência pelo mzv: medido na Hi, o mzv sobra 7,9% (X) e 12,7% (Y) contra 1,8% e 6,3%
+     * dos 2hump/3hump escolhidos, e com aceleração segura MENOR. Vale o recomendado pelo Klipper. */
     esc_shp[ax] = rec_shp[ax];
 }
 static void sh_iniciar(void *u)
@@ -307,6 +315,11 @@ static void ev_sh_aplicar(lv_event_t *e) { (void)e; hi_confirmar("Aplicar e salv
 static void sh_grafico(lv_obj_t *pai, int ax)
 {
     glob_t g; char pad[64]; snprintf(pad, sizeof pad, "/tmp/calibration_data_%c_*.csv", ax ? 'y' : 'x');
+    /* base 1.1.0.74: /tmp/shaper_calc_output_<eixo>-<data>.csv = freq, psd_sum, psd_x, psd_y, psd_z, after_shaper,
+     * <shaper>_vibrs... (resposta de cada shaper x10000) */
+    int novo = 0;
+    if (glob(pad, 0, NULL, &g) || !g.gl_pathc) { globfree(&g); snprintf(pad, sizeof pad, "/tmp/shaper_calc_output_%c-*.csv", ax ? 'y' : 'x'); novo = 1; }
+    else globfree(&g);
     lv_obj_t *ch = grafico(pai, 8, 4, 186, 120, 90, 0, 100);
     lv_chart_set_update_mode(ch, LV_CHART_UPDATE_MODE_CIRCULAR);
     lv_chart_series_t *s1 = lv_chart_add_series(ch, COR_DESTAQUE, LV_CHART_AXIS_PRIMARY_Y);
@@ -318,13 +331,17 @@ static void sh_grafico(lv_obj_t *pai, int ax)
     char cab[1024]; if (!fgets(cab, sizeof cab, f)) { fclose(f); return; }
     /* coluna do shaper escolhido */
     int col_sh = -1, col = 0; char *tok, *sp, cc[1024]; snprintf(cc, sizeof cc, "%s", cab);
-    for (tok = strtok_r(cc, ",\n", &sp); tok; tok = strtok_r(NULL, ",\n", &sp), col++)
-        if (n_shp[ax] && !strncmp(tok, shp[ax][esc_shp[ax]].nome, strlen(shp[ax][esc_shp[ax]].nome)) && tok[strlen(shp[ax][esc_shp[ax]].nome)] == '(') col_sh = col;
+    for (tok = strtok_r(cc, ",\n", &sp); tok; tok = strtok_r(NULL, ",\n", &sp), col++) {
+        while (*tok == ' ') tok++;
+        size_t ln = n_shp[ax] ? strlen(shp[ax][esc_shp[ax]].nome) : 0;
+        if (ln && !strncmp(tok, shp[ax][esc_shp[ax]].nome, ln) && (tok[ln] == '(' || !strcmp(tok + ln, "_vibrs"))) col_sh = col;
+    }
     double fr[400], psd[400], resp[400]; int n = 0; double mx = 1e-12; char l[1024];
     while (n < 400 && fgets(l, sizeof l, f)) {
         double v[16] = {0}; int k = 0; for (tok = strtok_r(l, ",", &sp); tok && k < 16; tok = strtok_r(NULL, ",", &sp)) v[k++] = atof(tok);
         if (k < 5) continue;
-        fr[n] = v[0]; psd[n] = v[4]; resp[n] = col_sh > 0 && col_sh < k ? v[col_sh] : 1; if (psd[n] > mx) mx = psd[n]; n++;
+        fr[n] = v[0]; psd[n] = novo ? v[1] : v[4];
+        resp[n] = col_sh > 0 && col_sh < k ? (novo ? v[col_sh] / 10000 : v[col_sh]) : 1; if (psd[n] > mx) mx = psd[n]; n++;
     }
     fclose(f);
     for (int i = 0; i < 90; i++) {                    /* reamostra 0..90 Hz em 90 pontos */

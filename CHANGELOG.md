@@ -8,7 +8,7 @@ Já aplicado na impressora de teste e no pacote. Vai na próxima imagem.
 - `[z_tilt] retry_tolerance` 0,1 → 0,03; `[bed_mesh] probe_count` 9×9 → 7×7; limpeza do bico 10 → 6 passadas (`scripts/otimiza_calib.py`).
 - `G29 BED=<temp>`: malha medida na temperatura de uso. Sem `BED`, fica igual ao original (`scripts/macro_g29_temp.py`).
 - `START_PRINT` com `variable_skip_mesh`: permite imprimir com a malha salva.
-- Vibração: prefere mzv a 2hump_ei.
+- Vibração: o Hi Painel entende o formato da base 1.1.0.74 (só o melhor shaper + CSV novo), e o nome "2hump_ei" não é mais cortado. A preferência por mzv foi tentada e retirada, porque medido na Hi ele vibra 4 a 6 vezes mais.
 - Nada de localização foi alterado (G28, z_align, z_offset, prtouch, NEXT_HOMEZ_NACCU).
 
 ### Ventoinha da peça
@@ -27,7 +27,7 @@ Já aplicado na impressora de teste e no pacote. Vai na próxima imagem.
 
 ### Sistema
 - O log do Klipper não grava as consultas de leitura. Caiu de ~250 para ~40 MB/dia (`scripts/webhooks_menos_log.py`).
-- Sem `web-server` e `webrtc` da nuvem Creality: o app Creality Print/Cloud deixa de ver a impressora. A câmera do Fluidd continua.
+- Sem `web-server` e `webrtc` da nuvem Creality (trocados por programas vazios, porque o Monitor da Creality os religava): o app Creality Print/Cloud deixa de ver a impressora. A câmera do Fluidd continua.
 - SSH só na porta 2222.
 - Relógio pelo NTP.br.
 - Na Hi já instalada, o `hi-ajustes` aplica as mudanças de sistema no boot.

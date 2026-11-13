@@ -391,3 +391,4 @@ O `idle_timeout` fica "Printing" enquanto o comando roda e depois volta. O resul
 - **Menu (`hi_menu`):** o texto quebra linha e a altura é medida. Os botões encolhem se não couberem.
 - **Desempenho:** quando a tela da Creality está na frente ou em descanso, o painel consulta o Moonraker a cada 4 s (na frente, a cada 0,7 s). A matriz da malha vem a cada 10 consultas.
 - **Build:** os Makefiles recompilam quando um `.h` muda. Uma mudança na estrutura de estado tinha dado segfault no mock.
+- **Vibração (à noite):** o painel lê o formato da base 1.1.0.74 (`best shaper.name ...`) e o gráfico usa `/tmp/shaper_calc_output_<eixo>-*.csv`. O nome do shaper foi ampliado para 16 caracteres, porque "2hump_ei" era cortado. A preferência por mzv foi retirada. Ver `calibracoes.md`.
