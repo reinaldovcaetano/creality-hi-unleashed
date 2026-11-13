@@ -165,7 +165,7 @@ static void ler_rede(hi_estado_t *e)
 static const char *CONSULTA =
     "/printer/objects/query?webhooks&print_stats&extruder&heater_bed&toolhead&gcode_move&virtual_sdcard"
     "&display_status&output_pin%20LED&output_pin%20fan0&system_stats&bed_mesh=profile_name,probed_matrix"
-    "&temperature_sensor%20mcu_temp&idle_timeout";
+    "&temperature_sensor%20mcu_temp&idle_timeout&filament_switch_sensor%20filament_sensor&configfile=save_config_pending";
 
 static void *thread_poll(void *x)
 {
@@ -213,6 +213,8 @@ static void *thread_poll(void *x)
             }
             if ((o = cJSON_GetObjectItem(s, "output_pin LED"))) e.led = num(o, "value", 0);
             if ((o = cJSON_GetObjectItem(s, "output_pin fan0"))) e.ventoinha = num(o, "value", 0);
+            if ((o = cJSON_GetObjectItem(s, "filament_switch_sensor filament_sensor"))) e.filamento_no_bico = cJSON_IsTrue(cJSON_GetObjectItem(o, "filament_detected"));
+            if ((o = cJSON_GetObjectItem(s, "configfile"))) e.config_pendente = cJSON_IsTrue(cJSON_GetObjectItem(o, "save_config_pending"));
             if ((o = cJSON_GetObjectItem(s, "idle_timeout"))) str(o, "state", e.ocioso, sizeof e.ocioso);
             if ((o = cJSON_GetObjectItem(s, "system_stats"))) { e.carga = num(o, "sysload", 0); e.mem_livre_kb = num(o, "memavail", 0); }
             if ((o = cJSON_GetObjectItem(s, "bed_mesh"))) {

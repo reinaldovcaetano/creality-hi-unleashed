@@ -63,6 +63,19 @@ static lv_obj_t *grafico(lv_obj_t *t, int x, int y, int w, int h, int pontos, in
     return ch;
 }
 
+/* ---------------- aviso: calibração que encosta o bico na mesa precisa de bico sem filamento ---------------- */
+static void (*depois_sem_filamento)(void);
+static void op_filamento(int op, void *u) { (void)u; if (op == 0) hi_ir(tela_filamento); }
+/* devolve true se pode seguir; se houver filamento no bico, mostra o aviso com o atalho para descarregar */
+static bool sem_filamento_ou_avisar(void)
+{
+    if (!hi_e.filamento_no_bico) return true;
+    const char *op[2] = {LV_SYMBOL_UPLOAD "  Descarregar agora", LV_SYMBOL_LEFT "  Voltar"};
+    lv_color_t cor[2] = {COR_AVISO, COR_CARTAO2};
+    hi_menu("Retire o filamento", "O bico é limpo e encosta no sensor da mesa.", op, cor, 2, op_filamento, NULL);
+    return false;
+}
+
 /* ================= menu ================= */
 static void ev_pid(lv_event_t *e) { hi_pid_mesa = (int)(intptr_t)lv_event_get_user_data(e); hi_ir(tela_pid); }
 
@@ -77,7 +90,7 @@ lv_obj_t *tela_calibracoes(void)
     hi_cfg_valor("input_shaper", "shaper_type_x", tx, sizeof tx); hi_cfg_valor("input_shaper", "shaper_freq_x", fx, sizeof fx);
     hi_cfg_valor("input_shaper", "shaper_type_y", ty, sizeof ty); hi_cfg_valor("input_shaper", "shaper_freq_y", fy, sizeof fy);
     snprintf(c, sizeof c, "X %s %s Hz   Y %s %s Hz", tx, fx, ty, fy);
-    snprintf(m, sizeof m, "variação %.3f mm  \xE2\x80\xA2  %dx%d", hi_e.malha_max - hi_e.malha_min, hi_e.malha_col, hi_e.malha_lin);
+    snprintf(m, sizeof m, "sem filamento  \xE2\x80\xA2  variação %.3f mm", hi_e.malha_max - hi_e.malha_min);
     hi_br(a); hi_br(b); hi_br(c); hi_br(m);
     /* "Calibrar tudo" primeiro: quem quer rapidez resolve com um toque */
     lv_obj_t *tudo = hi_item_grande(l, LV_SYMBOL_REFRESH, COR_DESTAQUE, "Calibrar tudo", "home, vibração, PID e malha em sequência");
@@ -87,7 +100,7 @@ lv_obj_t *tela_calibracoes(void)
     lv_obj_add_event_cb(hi_item_grande(l, LV_SYMBOL_CHARGE, COR_BICO, "PID do bico", a), ev_pid, LV_EVENT_CLICKED, (void *)0);
     lv_obj_add_event_cb(hi_item_grande(l, LV_SYMBOL_CHARGE, COR_MESA, "PID da mesa", b), ev_pid, LV_EVENT_CLICKED, (void *)1);
     hi_ao_clicar(hi_item_grande(l, LV_SYMBOL_AUDIO, COR_DESTAQUE, "Vibração (shaper)", c), tela_shaper);
-    hi_ao_clicar(hi_item_grande(l, LV_SYMBOL_IMAGE, COR_OK, "Malha da mesa", m), tela_malha);
+    hi_ao_clicar(hi_item_grande(l, LV_SYMBOL_IMAGE, COR_OK, "Nivelamento e malha", m), tela_malha);
     hi_ao_clicar(hi_item_grande(l, LV_SYMBOL_DOWNLOAD, COR_MESA, "Nivelamento Z", hi_calib_ultima("Nivelamento Z", d, sizeof d) ? d : "alinha os dois motores Z"), tela_ztilt);
     snprintf(a, sizeof a, "atual %.3f", hi_e.pa); hi_br(a);
     hi_ao_clicar(hi_item_grande(l, LV_SYMBOL_UP, COR_AVISO, "Pressure Advance", a), tela_pa);
@@ -137,7 +150,11 @@ static void pid_salvar(void *u) { (void)u; hi_gcode("TURN_OFF_HEATERS\nM107"); p
 static void ev_pid_salvar(lv_event_t *e) { (void)e; hi_confirmar("Salvar?", "Grava os novos valores no printer.cfg (com backup) e reinicia o Klipper.", LV_SYMBOL_SAVE "  Salvar", COR_OK, pid_salvar, NULL); }
 static void set_pid_val(double v, void *u) { pid_novo[(int)(intptr_t)u] = v; pid_desenhar(); }
 static void ev_pid_editar(lv_event_t *e) { int i = (int)(intptr_t)lv_event_get_user_data(e); const char *n[3] = {"Kp", "Ki", "Kd"}; hi_teclado_num(n[i], pid_novo[i], 0, 1000, 3, set_pid_val, (void *)(intptr_t)i); }
-static void ev_pid_descartar(lv_event_t *e) { (void)e; hi_gcode("TURN_OFF_HEATERS\nM107"); hi_toast("Descartado (os valores atuais continuam)", COR_AVISO); hi_voltar(); }
+static void ev_pid_descartar(lv_event_t *e)
+{
+    (void)e; hi_gcode("TURN_OFF_HEATERS\nM107\nFIRMWARE_RESTART");   /* reinicia para o resultado não ficar pendente */
+    hi_toast("Descartado (os valores atuais continuam). Reiniciando o Klipper...", COR_AVISO); hi_voltar();
+}
 
 static void pid_desenhar(void)
 {
@@ -407,11 +424,26 @@ lv_obj_t *tela_shaper(void)
 static int mh_fase, mh_temp;
 static lv_obj_t *mh_area, *l_mh_info;
 static void mh_desenhar(void);
-static void set_mh_temp(double v, void *u) { (void)u; mh_temp = (int)v; mh_desenhar(); }
-static void ev_mh_temp(lv_event_t *e) { (void)e; hi_teclado_num("Temperatura da mesa para medir", mh_temp, 0, 110, 0, set_mh_temp, NULL); }
-static void mh_iniciar(void *u) { (void)u; job_iniciar(); mh_fase = 1; hi_gcode("M190 S%d\nG28\nBED_MESH_CALIBRATE", mh_temp); mh_desenhar(); }
-static void ev_mh_iniciar(lv_event_t *e) { (void)e; if (!pode_calibrar()) return; hi_confirmar("Medir a malha?", "Aquece a mesa, faz Home e mede os pontos com o sensor de pressão. Mesa limpa e sem objetos.", LV_SYMBOL_PLAY "  Medir", COR_DESTAQUE, mh_iniciar, NULL); }
-static void ev_mh_salvar(lv_event_t *e) { (void)e; hi_confirmar("Salvar a malha?", "Grava no printer.cfg (SAVE_CONFIG) e reinicia o Klipper.", LV_SYMBOL_SAVE "  Salvar", COR_OK, salvar_config, "Malha da mesa"); }
+/* Ajuste 13/11: mesma calibração da tela original: macro G29 da Creality = limpa o bico (NOZ_CLEAR), G28 Z,
+ * Z_TILT_ADJUST, BED_MESH_CALIBRATE e grava sozinha (CXSAVE_CONFIG). Mesa a 60 °C (definido pela macro). */
+static void mh_iniciar(void *u) { (void)u; job_iniciar(); mh_fase = 1; hi_gcode("G29"); mh_desenhar(); }
+static void op_pendente(int op, void *u)
+{
+    (void)u;
+    if (op == 0) mh_iniciar(NULL);                                        /* gravar junto */
+    else if (op == 1) { hi_gcode("FIRMWARE_RESTART"); hi_toast("Pendências descartadas. Reiniciando o Klipper; depois toque em Calibrar.", COR_AVISO); }
+}
+static void ev_mh_iniciar(lv_event_t *e)
+{
+    (void)e; if (!pode_calibrar() || !sem_filamento_ou_avisar()) return;
+    if (hi_e.config_pendente) {
+        const char *op[3] = {LV_SYMBOL_SAVE "  Gravar junto", LV_SYMBOL_TRASH "  Descartar pendências", LV_SYMBOL_LEFT "  Voltar"};
+        lv_color_t cor[3] = {COR_OK, COR_AVISO, COR_CARTAO2};
+        hi_menu("Calibração não salva", "Há um resultado calculado e não gravado.", op, cor, 3, op_pendente, NULL);
+        return;
+    }
+    hi_confirmar("Nivelar e medir a malha?", "Igual à tela original: limpa o bico, nivela os dois Z e mede a malha com o sensor de pressão (mesa a 60\xC2\xB0" "C). Grava sozinha no fim. Mesa limpa e livre.", LV_SYMBOL_PLAY "  Iniciar", COR_DESTAQUE, mh_iniciar, NULL);
+}
 static void mh_mapa(lv_obj_t *pai)
 {
     int nl = hi_e.malha_lin, nc = hi_e.malha_col;
@@ -444,13 +476,10 @@ static void mh_desenhar(void)
         lv_obj_add_event_cb(x, ev_interromper, LV_EVENT_CLICKED, NULL);
         return;
     }
-    lv_obj_t *tc = hi_botao(mh_area, "", COR_CARTAO2, 102, 30); lv_obj_set_pos(tc, 210, 100);
-    snprintf(b, sizeof b, "mesa %d" GRAU " " LV_SYMBOL_EDIT, mh_temp); lv_label_set_text(lv_obj_get_child(tc, 0), b);
-    lv_obj_add_event_cb(tc, ev_mh_temp, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *m = hi_botao(mh_area, LV_SYMBOL_REFRESH " Medir", COR_DESTAQUE, 102, 30); lv_obj_set_pos(m, 210, 134);
+    lv_obj_t *aviso = hi_rotulo(mh_area, hi_e.filamento_no_bico ? LV_SYMBOL_WARNING " retire o\nfilamento antes" : LV_SYMBOL_OK " sem filamento\nno bico", &hi_font_12, hi_e.filamento_no_bico ? COR_AVISO : COR_OK);
+    lv_obj_set_pos(aviso, 212, 102);
+    lv_obj_t *m = hi_botao(mh_area, LV_SYMBOL_REFRESH " Calibrar", COR_DESTAQUE, 102, 44); lv_obj_set_pos(m, 210, 152);
     lv_obj_add_event_cb(m, ev_mh_iniciar, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *s = hi_botao(mh_area, LV_SYMBOL_SAVE " Salvar", mh_fase == 2 ? COR_OK : COR_CARTAO2, 102, 30); lv_obj_set_pos(s, 210, 168);
-    lv_obj_add_event_cb(s, ev_mh_salvar, LV_EVENT_CLICKED, NULL);
 }
 static void mh_atualizar(const hi_estado_t *e)
 {
@@ -462,14 +491,14 @@ static void mh_atualizar(const hi_estado_t *e)
     if (job_passo(e)) {
         job.ativo = 0; mh_fase = job.erro ? 0 : 2;
         if (job.erro) { char m[240]; snprintf(m, sizeof m, "Falhou: %s", job_erro_txt()); hi_toast(m, COR_ERRO); }
-        else { char r[64]; snprintf(r, sizeof r, "variação %.3f mm (%d" GRAU ")", e->malha_max - e->malha_min, mh_temp); hi_calib_registrar("Malha da mesa", hi_br(r)); hi_toast("Malha medida. Toque em Salvar para gravar.", COR_OK); }
+        else { char r[64]; snprintf(r, sizeof r, "variação %.3f mm", e->malha_max - e->malha_min); hi_calib_registrar("Nivelamento e malha", hi_br(r)); hi_toast("Nivelado e medido. Já ficou gravado.", COR_OK); }
         mh_desenhar();
     }
 }
 lv_obj_t *tela_malha(void)
 {
     lv_obj_t *t = hi_tela_nova();
-    hi_cabecalho(t, "Malha da mesa", true);
+    hi_cabecalho(t, "Nivelamento e malha", true);
     hi_fil_t f[HI_MAX_FIL]; int at; hi_fil_carregar(f, HI_MAX_FIL, &at); mh_temp = at >= 0 ? f[at].mesa : 60;
     mh_fase = 0;
     mh_area = lv_obj_create(t); lv_obj_remove_style_all(mh_area); lv_obj_set_size(mh_area, HI_W, HI_H - 34); lv_obj_set_pos(mh_area, 0, 34);
@@ -633,7 +662,7 @@ lv_obj_t *tela_historico_calib(void)
  * e malha por último (a mesa já está quente do PID). O nivelamento Z separado é opcional (logo após o home). */
 static int ct_sel[5] = {0, 1, 1, 1, 1}, ct_rodando, ct_etapa;   /* etapa -1 = home */
 static lv_obj_t *ct_btn[5], *ct_info;
-static const char *ct_nome[5] = {"Nível Z", "Vibração", "PID do bico", "PID da mesa", "Malha da mesa"};
+static const char *ct_nome[5] = {"Nível Z", "Vibração", "PID do bico", "PID da mesa", "Nivel.+malha"};
 static void ev_ct_sel(lv_event_t *e)
 {
     int i = (int)(intptr_t)lv_event_get_user_data(e); ct_sel[i] = !ct_sel[i];
@@ -656,11 +685,11 @@ static void ct_proxima(void)
         case 1: hi_gcode("SHAPER_CALIBRATE"); break;
         case 2: hi_gcode("M106 S255\nPID_CALIBRATE HEATER=extruder TARGET=%d\nM107", tb); break;
         case 3: hi_gcode("PID_CALIBRATE HEATER=heater_bed TARGET=%d", tm); break;
-        case 4: hi_gcode("M190 S%d\nBED_MESH_CALIBRATE", tm); break;
+        case 4: hi_gcode("G29"); break;   /* limpa bico, Z, malha e grava (igual à tela original) */
     }
 }
 static void ct_iniciar(void *u) { (void)u; ct_rodando = 1; ct_etapa = -1; ct_proxima(); }
-static void ev_ct_iniciar(lv_event_t *e) { (void)e; if (!pode_calibrar()) return; hi_confirmar("Calibrar tudo?", "Home, depois as calibrações marcadas em sequência (20 a 40 min). Mesa livre. No fim você decide se salva.", LV_SYMBOL_PLAY "  Iniciar", COR_DESTAQUE, ct_iniciar, NULL); }
+static void ev_ct_iniciar(lv_event_t *e) { (void)e; if (!pode_calibrar()) return; if (ct_sel[4] && !sem_filamento_ou_avisar()) return; hi_confirmar("Calibrar tudo?", "Home, depois as calibrações marcadas em sequência (20 a 40 min). Mesa livre. No fim você decide se salva.", LV_SYMBOL_PLAY "  Iniciar", COR_DESTAQUE, ct_iniciar, NULL); }
 static void ev_ct_salvar(lv_event_t *e) { (void)e; if (ct_rodando) { hi_toast("Aguarde terminar", COR_AVISO); return; } hi_confirmar("Salvar tudo?", "Grava todos os resultados (SAVE_CONFIG) e reinicia o Klipper.", LV_SYMBOL_SAVE "  Salvar", COR_OK, salvar_config, "Calibrar tudo"); }
 static void ct_atualizar(const hi_estado_t *e)
 {

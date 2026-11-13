@@ -2,9 +2,10 @@
 CC=arm-linux-gnueabi-gcc
 LV=lib/lvgl
 SRC=$(shell find $(LV)/src -name "*.c") $(wildcard fontes/*.c) $(wildcard src/ui/*.c) $(wildcard src/dados/*.c) lib/cjson/cJSON.c src/main_fb.c
+HDRS=$(wildcard src/*.h src/ui/*.h src/dados/*.h)
 OBJ=$(patsubst %.c,build/arm/%.o,$(SRC))
 CFLAGS=-O2 -w -I. -Isrc -I$(LV) -DLV_CONF_INCLUDE_SIMPLE -DLV_LVGL_H_INCLUDE_SIMPLE -march=armv7-a -mfloat-abi=soft
-build/arm/%.o: %.c src/lv_conf.h
+build/arm/%.o: %.c src/lv_conf.h $(HDRS)
 	@mkdir -p $(dir $@); $(CC) $(CFLAGS) -c $< -o $@
 build/arm/hi-painel: $(OBJ)
 	$(CC) -static $^ -lm -lpthread -o $@ && arm-linux-gnueabi-strip $@

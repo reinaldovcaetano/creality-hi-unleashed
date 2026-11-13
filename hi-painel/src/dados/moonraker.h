@@ -37,6 +37,8 @@ typedef struct {
     double max_accel, max_vel;
     /* saídas */
     double led, ventoinha;
+    int filamento_no_bico;
+    int config_pendente;            /* configfile.save_config_pending: calibração calculada e ainda não gravada */          /* sensor de filamento do cabeçote (filament_sensor) */
     /* malha */
     int malha_lin, malha_col; double malha[HI_MAX_MALHA][HI_MAX_MALHA], malha_min, malha_max;
     char malha_perfil[32];

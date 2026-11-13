@@ -47,7 +47,7 @@ static void salvar_png(const char *nome, const lv_color_t *img, int w, int h)
 }
 #define MC 3
 #define MW (MC * W + (MC + 1) * 10)
-static lv_color_t mont[MW * (5 * H + 60)];
+static lv_color_t mont[MW * (6 * H + 70)];
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -61,11 +61,12 @@ int main(int argc, char **argv)
     struct { const char *n; hi_tela_fn f; } telas[] = {
         {"01-inicio", tela_inicio}, {"02-calibracoes", tela_calibracoes}, {"03-pid", tela_pid}, {"04-vibracao", tela_shaper},
         {"05-malha", tela_malha}, {"06-imprimir", tela_imprimir}, {"07-controle", tela_controle}, {"08-filamento", tela_filamento},
-        {"09-filamentos", tela_filamentos}, {"10-ajustes", tela_ajustes}, {"11-rede", tela_rede}, {"12-imprimindo", tela_imprimindo}, {"13-manutencao", tela_manutencao}, {"14-queda", tela_queda_energia}, {"15-velocidade", tela_velocidade}};
+        {"09-filamentos", tela_filamentos}, {"10-ajustes", tela_ajustes}, {"11-rede", tela_rede}, {"12-imprimindo", tela_imprimindo}, {"13-manutencao", tela_manutencao}, {"14-queda", tela_queda_energia}, {"15-velocidade", tela_velocidade}, {"16-calibrar-tudo", tela_calibrar_tudo}};
     int nt = sizeof telas / sizeof telas[0], linhas = (nt + MC - 1) / MC, MH = linhas * H + (linhas + 1) * 10;
     for (int i = 0; i < MW * MH; i++) mont[i] = lv_color_hex(0x30343B);
     char nome[256];
     for (int i = 0; i < nt; i++) {
+        fprintf(stderr, "tela %s\n", telas[i].n);
         hi_set_atualizar(NULL);
         lv_obj_t *s = telas[i].f(); lv_scr_load(s);
         for (int k = 0; k < 3; k++) { hi_atualizar_agora(); lv_tick_inc(600); lv_timer_handler(); usleep(200000); }
